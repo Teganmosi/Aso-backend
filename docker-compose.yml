@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: aso_postgres
+    environment:
+      POSTGRES_DB: aso_db
+      POSTGRES_USER: aso_user
+      POSTGRES_PASSWORD: aso_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: aso_redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
