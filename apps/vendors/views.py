@@ -21,13 +21,9 @@ class VendorRegisterView(APIView):
 
         data = serializer.validated_data
         bank_data = None
-        if 'account_name' in data and 'account_number' in data and 'bank_name' in data and 'bank_code' in data:
-            bank_data = {
-                'account_name': data['account_name'],
-                'account_number': data['account_number'],
-                'bank_name': data['bank_name'],
-                'bank_code': data['bank_code']
-            }
+        bank_fields = ['account_name', 'account_number', 'bank_name', 'bank_code']
+        if all(data.get(f) for f in bank_fields):
+            bank_data = {f: data[f] for f in bank_fields}
 
         vendor_profile = register_vendor_service(
             user=request.user,
@@ -35,6 +31,11 @@ class VendorRegisterView(APIView):
             city=data['city'],
             state=data['state'],
             description=data.get('description', ''),
+            instagram_handle=data.get('instagram_handle', ''),
+            workshop_address=data.get('workshop_address', ''),
+            landmark=data.get('landmark', ''),
+            nin_number=data.get('nin_number', ''),
+            cac_number=data.get('cac_number', ''),
             bank_data=bank_data
         )
 
@@ -43,6 +44,7 @@ class VendorRegisterView(APIView):
             'message': 'Vendor application submitted successfully. Pending admin approval.',
             'vendor': VendorProfileSerializer(vendor_profile).data
         }, status=status.HTTP_201_CREATED)
+
 
 
 class VendorDetailView(APIView):
@@ -76,14 +78,18 @@ class BankAccountView(APIView):
         serializer = BankAccountSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        account = update_bank_account_service(
+        account, created = update_bank_account_service(
             vendor_profile=request.user.vendor_profile,
             bank_data=serializer.validated_data
         )
 
+        msg = 'Bank account created successfully.' if created else 'Bank account updated successfully.'
+        http_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+
         return Response({
             'success': True,
-            'message': 'Bank account updated successfully.',
+            'message': msg,
             'bank_account': BankAccountSerializer(account).data
-        })
+        }, status=http_status)
+
 

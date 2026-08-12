@@ -19,3 +19,17 @@ htmlcov/
 .DS_Store
 cookies.txt
 
+# Test files and test suite outputs
+tests/
+test_*.py
+
+# Temporary and probe files
+_probe*
+*.bin
+*.tmp
+
+# IDE settings
+.vscode/
+.idea/
+
+

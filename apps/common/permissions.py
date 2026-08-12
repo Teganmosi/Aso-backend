@@ -1,4 +1,5 @@
 from rest_framework import permissions
+from apps.vendors.models import VendorStatus
 
 class IsStaffUser(permissions.BasePermission):
     """
@@ -17,8 +18,9 @@ class IsVendorOwner(permissions.BasePermission):
             request.user 
             and request.user.is_authenticated 
             and hasattr(request.user, 'vendor_profile')
-            and request.user.vendor_profile.status == 'APPROVED'
+            and request.user.vendor_profile.status == VendorStatus.APPROVED
         )
+
 
     def has_object_permission(self, request, view, obj):
         if not (request.user and request.user.is_authenticated and hasattr(request.user, 'vendor_profile')):

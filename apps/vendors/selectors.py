@@ -24,5 +24,6 @@ def get_vendor_bank_account(vendor_profile: VendorProfile) -> BankAccount:
     """
     Returns linked BankAccount for vendor profile, or None if not set up.
     """
-    return getattr(vendor_profile, 'bank_account', None)
+    return BankAccount.objects.filter(vendor=vendor_profile).first()
+
 

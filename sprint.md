@@ -12,7 +12,7 @@ A sprint is strictly defined as **DONE** when:
 ## Master 10-Sprint Overview
 
 - [x] **Sprint 1: Architecture Foundation, User Identity & Session Auth**
-- [ ] **Sprint 2: Designer Storefronts & KYC Onboarding**
+- [x] **Sprint 2: Designer Storefronts & KYC Onboarding**
 - [ ] **Sprint 3: Category Tree & Product Catalog Engine**
 - [ ] **Sprint 4: Product Variants & Presigned S3/R2 Media Pipeline**
 - [ ] **Sprint 5: Single-Vendor Cart Engine**
@@ -196,13 +196,15 @@ A sprint is strictly defined as **DONE** when:
 
 ---
 
-### ─── Sprint 9: Financial Ledger, Customer Protection Window (72h) & Payout Engine ───
+### ─── Sprint 9: Financial Ledger, Customer Protection Window (72h) & Automated Payout Engine ───
 
 #### Objectives:
+* Implement **Automated KYC & Identity Verification** (Paystack NUBAN Name Resolution `GET /bank/resolve` & automated NIN/CAC matching).
 * Implement immutable single-entry financial ledger (`payouts_ledgerentry` = Source of Truth).
 * Implement materialized `VendorBalance` updating atomically inside the same DB transaction.
 * Implement 72-hour Customer Protection Window (auto-completes order `DELIVERED` → `COMPLETED` and releases pending funds to available balance).
 * Implement multi-stage Payout state machine (`AVAILABLE` → `PAYOUT_RESERVED` → `PROCESSING` → `SUCCESSFUL` / `FAILED`) with Paystack Transfer API integration.
+
 
 #### How You Will Test Sprint 9:
 1. **Pending Earnings Verification:**

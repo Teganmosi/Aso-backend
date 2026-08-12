@@ -17,13 +17,14 @@ class BankAccountSerializer(serializers.ModelSerializer):
 
 class PublicVendorProfileSerializer(serializers.ModelSerializer):
     """
-    Public storefront serializer excluding sensitive bank information.
+    Public storefront serializer excluding sensitive bank information and NIN.
     """
     class Meta:
         model = VendorProfile
         fields = [
             'id', 'store_name', 'slug', 'description', 'logo_url',
-            'banner_url', 'city', 'state', 'is_verified',
+            'banner_url', 'city', 'state', 'kyc_tier', 'is_verified',
+            'instagram_handle', 'workshop_address', 'landmark',
             'average_rating', 'review_count', 'created_at'
         ]
         read_only_fields = fields
@@ -31,7 +32,7 @@ class PublicVendorProfileSerializer(serializers.ModelSerializer):
 
 class VendorProfileSerializer(serializers.ModelSerializer):
     """
-    Private vendor profile serializer including bank details (for vendor owner dashboard).
+    Private vendor profile serializer including bank details and KYC proof.
     """
     bank_account = BankAccountSerializer(read_only=True)
 
@@ -39,10 +40,12 @@ class VendorProfileSerializer(serializers.ModelSerializer):
         model = VendorProfile
         fields = [
             'id', 'store_name', 'slug', 'description', 'logo_url',
-            'banner_url', 'city', 'state', 'status', 'is_verified',
-            'average_rating', 'review_count', 'bank_account', 'created_at'
+            'banner_url', 'city', 'state', 'status', 'kyc_tier', 'is_verified',
+            'instagram_handle', 'workshop_address', 'landmark',
+            'nin_number', 'cac_number', 'average_rating', 'review_count',
+            'bank_account', 'created_at'
         ]
-        read_only_fields = ['id', 'slug', 'status', 'is_verified', 'average_rating', 'review_count', 'created_at']
+        read_only_fields = ['id', 'slug', 'status', 'kyc_tier', 'is_verified', 'average_rating', 'review_count', 'created_at']
 
 
 class VendorRegistrationSerializer(serializers.Serializer):
@@ -50,6 +53,13 @@ class VendorRegistrationSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True)
     city = serializers.CharField(max_length=100)
     state = serializers.CharField(max_length=100)
+
+    # Optional Verification & Logistics Pickup Fields
+    instagram_handle = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    workshop_address = serializers.CharField(required=False, allow_blank=True)
+    landmark = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    nin_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    cac_number = serializers.CharField(max_length=50, required=False, allow_blank=True)
 
     # Optional initial bank account fields
     account_name = serializers.CharField(max_length=255, required=False)
@@ -67,6 +77,13 @@ class VendorRegistrationSerializer(serializers.Serializer):
             raise serializers.ValidationError("Account number must consist of 10 numeric digits.")
         return value
 
+    def validate_nin_number(self, value):
+        if value:
+            if not value.isdigit() or len(value) != 11:
+                raise serializers.ValidationError("NIN number must consist of exactly 11 numeric digits.")
+        return value
+
+
     def validate(self, data):
         bank_fields = ['account_name', 'account_number', 'bank_name', 'bank_code']
         provided = [f for f in bank_fields if f in data and data[f]]
@@ -76,4 +93,5 @@ class VendorRegistrationSerializer(serializers.Serializer):
                 "If bank details are provided, all four fields (account_name, account_number, bank_name, bank_code) must be provided."
             )
         return data
+
 
