@@ -16,7 +16,7 @@ A sprint is strictly defined as **DONE** when:
 - [x] **Sprint 3: Category Tree & Product Catalog Engine**
 - [x] **Sprint 4: Product Variants & Presigned S3/R2 Media Pipeline**
 - [x] **Sprint 5: Single-Vendor Cart Engine**
-- [ ] **Sprint 6: Order Engine & Concurrency-Safe Stock Reservation**
+- [x] **Sprint 6: Order Engine & Concurrency-Safe Stock Reservation**
 - [ ] **Sprint 7: Paystack Payment Gateway & Idempotent Webhook Engine**
 - [ ] **Sprint 8: Vendor Order SLA (48h) & Delivery Dispatch Coordination**
 - [ ] **Sprint 9: Financial Ledger, Customer Protection Window (72h) & Payout Engine**
