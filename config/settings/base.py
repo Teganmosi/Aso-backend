@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     'apps.products',
     'apps.cart',
     'apps.orders',
+    'apps.payments',
 ]
 
 MIDDLEWARE = [
@@ -150,3 +151,7 @@ CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
 ]
+
+# Paystack Payment Gateway Settings
+PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', '')
+PAYSTACK_PUBLIC_KEY = os.environ.get('PAYSTACK_PUBLIC_KEY', '')
