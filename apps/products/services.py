@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.db import transaction
+from rest_framework.exceptions import ValidationError
 from apps.products.models import Product, Category, ApprovalStatus, ProductStatus
 
 
@@ -80,3 +82,93 @@ def delete_product(product: Product) -> None:
     """
     product.is_active = False
     product.save(update_fields=['is_active'])
+
+
+from apps.products.models import ProductVariant, ProductMedia
+
+
+@transaction.atomic
+def create_product_variant(product: Product, validated_data: dict) -> ProductVariant:
+    """
+    Creates a new variant (size, color, stock) for a product.
+    Rejects duplicate size/color combinations on the same product.
+    """
+    size = str(validated_data.get('size') or '').strip()
+    color = validated_data.get('color')
+    if ProductVariant.objects.filter(product=product, size=size, color=color).exists():
+        raise ValidationError("A variant with this size and color already exists for this product.")
+
+    variant = ProductVariant.objects.create(
+        product=product,
+        **validated_data
+    )
+    return variant
+
+
+@transaction.atomic
+def update_product_variant(variant: ProductVariant, validated_data: dict) -> ProductVariant:
+    """
+    Updates an existing product variant.
+    Enforces the same (product, size, color) uniqueness constraint as creation
+    whenever size or color is being changed.
+    """
+    if 'size' in validated_data or 'color' in validated_data:
+        new_size = validated_data.get('size', variant.size)
+        new_color = validated_data.get('color', variant.color)
+        conflict = ProductVariant.objects.filter(
+            product=variant.product,
+            size=new_size,
+            color=new_color
+        ).exclude(pk=variant.pk)
+        if conflict.exists():
+            raise ValidationError("A variant with this size and color already exists for this product.")
+
+    for attr, value in validated_data.items():
+        setattr(variant, attr, value)
+    variant.save()
+    return variant
+
+
+@transaction.atomic
+def delete_product_variant(variant: ProductVariant) -> None:
+    """
+    Deactivates or deletes a product variant.
+    """
+    variant.delete()
+
+
+@transaction.atomic
+def attach_product_media(product: Product, validated_data: dict) -> ProductMedia:
+    """
+    Attaches a media asset (photo/video) to a product.
+    If is_primary is True, unsets is_primary on existing media items.
+    Enforces the vendor ownership boundary on internal storage URLs.
+    """
+    url = str(validated_data.get('url', ''))
+    storage_base = getattr(settings, 'ASO_STORAGE_PUBLIC_BASE', '')
+    if storage_base and url.startswith(storage_base):
+        # Internal storage asset -> must belong to this vendor's namespace
+        vendor_prefix = f"/vendors/{product.vendor_id}/"
+        if vendor_prefix not in url:
+            raise ValidationError("You can only attach media from your own vendor storage path.")
+
+    is_primary = validated_data.get('is_primary', False)
+    if is_primary:
+        ProductMedia.objects.filter(product=product, is_primary=True).update(is_primary=False)
+    elif not ProductMedia.objects.filter(product=product, is_primary=True).exists():
+        validated_data['is_primary'] = True
+
+    media = ProductMedia.objects.create(
+        product=product,
+        **validated_data
+    )
+    return media
+
+
+@transaction.atomic
+def delete_product_media(media: ProductMedia) -> None:
+    """
+    Deletes a product media item.
+    """
+    media.delete()
+

@@ -14,7 +14,7 @@ A sprint is strictly defined as **DONE** when:
 - [x] **Sprint 1: Architecture Foundation, User Identity & Session Auth**
 - [x] **Sprint 2: Designer Storefronts & KYC Onboarding**
 - [x] **Sprint 3: Category Tree & Product Catalog Engine**
-- [ ] **Sprint 4: Product Variants & Presigned S3/R2 Media Pipeline**
+- [x] **Sprint 4: Product Variants & Presigned S3/R2 Media Pipeline**
 - [ ] **Sprint 5: Single-Vendor Cart Engine**
 - [ ] **Sprint 6: Order Engine & Concurrency-Safe Stock Reservation**
 - [ ] **Sprint 7: Paystack Payment Gateway & Idempotent Webhook Engine**

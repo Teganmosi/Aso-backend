@@ -108,6 +108,9 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Public base URL for vendor product media assets (S3/R2 CDN)
+ASO_STORAGE_PUBLIC_BASE = os.environ.get('ASO_STORAGE_PUBLIC_BASE', 'https://cdn.aso.ng')
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Django REST Framework Settings

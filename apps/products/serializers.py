@@ -1,5 +1,13 @@
 from rest_framework import serializers
-from apps.products.models import Category, Product, ApprovalStatus, ProductStatus
+from apps.products.models import (
+    Category,
+    Product,
+    ProductVariant,
+    ProductMedia,
+    ApprovalStatus,
+    ProductStatus,
+    MediaType
+)
 from apps.vendors.serializers import PublicVendorProfileSerializer
 
 
@@ -40,6 +48,87 @@ class CategorySimpleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ['id', 'name', 'slug', 'image_url']
+
+
+class ProductVariantSerializer(serializers.ModelSerializer):
+    """
+    Serializer for product variants (sizes, colors, SKU, stock quantity).
+    """
+    price_kobo = serializers.IntegerField(read_only=True)
+    price_naira = serializers.FloatField(read_only=True)
+    in_stock = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductVariant
+        fields = [
+            'id',
+            'size',
+            'color',
+            'sku',
+            'stock_quantity',
+            'price_override_kobo',
+            'price_kobo',
+            'price_naira',
+            'in_stock',
+            'is_active',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = ['id', 'sku', 'price_kobo', 'price_naira', 'in_stock', 'created_at', 'updated_at']
+
+    def get_in_stock(self, obj) -> bool:
+        return obj.stock_quantity > 0 and obj.is_active
+
+    def validate_stock_quantity(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Stock quantity cannot be negative.")
+        return value
+
+    def validate_size(self, value):
+        if not value or not str(value).strip():
+            raise serializers.ValidationError("Size cannot be blank.")
+        return str(value).strip()
+
+    def validate_price_override_kobo(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("Price override must be greater than 0 Kobo.")
+        return value
+
+
+class ProductMediaSerializer(serializers.ModelSerializer):
+    """
+    Serializer for product media gallery assets (photos and videos).
+    """
+    class Meta:
+        model = ProductMedia
+        fields = [
+            'id',
+            'media_type',
+            'url',
+            'thumbnail_url',
+            'display_order',
+            'is_primary',
+            'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+    def validate_url(self, value):
+        if not value or not str(value).strip():
+            raise serializers.ValidationError("Media URL cannot be blank.")
+        return str(value).strip()
+
+
+class PresignedUploadUrlRequestSerializer(serializers.Serializer):
+    """
+    Serializer for requesting an S3/R2 presigned upload URL.
+    """
+    filename = serializers.CharField(max_length=255)
+    file_type = serializers.CharField(max_length=50)
+
+    def validate_filename(self, value):
+        if not value or not str(value).strip():
+            raise serializers.ValidationError("Filename is required.")
+        return str(value).strip()
 
 
 class ProductCreateUpdateSerializer(serializers.ModelSerializer):
@@ -101,6 +190,8 @@ class ProductListSerializer(serializers.ModelSerializer):
     vendor = PublicVendorProfileSerializer(read_only=True)
     category = CategorySimpleSerializer(read_only=True)
     base_price_naira = serializers.FloatField(read_only=True)
+    primary_image_url = serializers.SerializerMethodField()
+    available_sizes = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -117,19 +208,41 @@ class ProductListSerializer(serializers.ModelSerializer):
             'is_active',
             'average_rating',
             'review_count',
+            'primary_image_url',
+            'available_sizes',
             'vendor',
             'category',
             'created_at'
         ]
 
+    def get_primary_image_url(self, obj):
+        media_items = list(obj.media.all())  # uses prefetch cache
+        for item in media_items:
+            if item.is_primary:
+                return item.url
+        for item in media_items:
+            if item.media_type == MediaType.IMAGE:
+                return item.url
+        return None
+
+    def get_available_sizes(self, obj):
+        # Python-level filtering over the prefetched variants (cache-bound, no extra queries)
+        return sorted({
+            variant.size for variant in obj.variants.all()
+            if variant.is_active and variant.stock_quantity > 0
+        })
+
 
 class ProductDetailSerializer(serializers.ModelSerializer):
     """
-    Detailed product serializer.
+    Detailed product serializer including media gallery and variant availability matrix.
     """
     vendor = PublicVendorProfileSerializer(read_only=True)
     category = CategorySerializer(read_only=True)
     base_price_naira = serializers.FloatField(read_only=True)
+    primary_image_url = serializers.SerializerMethodField()
+    media = serializers.SerializerMethodField()
+    variants = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -147,8 +260,30 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             'rejection_reason',
             'average_rating',
             'review_count',
+            'primary_image_url',
+            'media',
+            'variants',
             'vendor',
             'category',
             'created_at',
             'updated_at'
         ]
+
+    def get_media(self, obj):
+        # Full gallery (model Meta ordering: display_order, -is_primary, created_at)
+        return ProductMediaSerializer(list(obj.media.all()), many=True).data
+
+    def get_variants(self, obj):
+        # Variant availability matrix: only active variants are exposed publicly
+        active_variants = [variant for variant in obj.variants.all() if variant.is_active]
+        return ProductVariantSerializer(active_variants, many=True).data
+
+    def get_primary_image_url(self, obj):
+        media_items = list(obj.media.all())  # uses prefetch cache
+        for item in media_items:
+            if item.is_primary:
+                return item.url
+        for item in media_items:
+            if item.media_type == MediaType.IMAGE:
+                return item.url
+        return None
