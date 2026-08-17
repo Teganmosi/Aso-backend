@@ -2,17 +2,20 @@ import hmac
 import json
 import uuid
 import hashlib
+from datetime import timedelta
 from urllib.parse import urlencode
 from django.conf import settings
 from django.db import transaction
 from django.http import HttpRequest
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.request import Request
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from apps.orders.models import Order, OrderStatus
 from .models import PaymentProvider, PaymentRequest, PaymentWebhookLog
+
 
 
 def verify_paystack_signature(payload: bytes, signature: str) -> bool:
@@ -204,7 +207,9 @@ def verify_and_process_webhook(
                 order = payment_request.order
                 if order.order_status == OrderStatus.PENDING_PAYMENT:
                     order.order_status = OrderStatus.PAID
-                    order.save(update_fields=['order_status'])
+                    # Set vendor SLA: 48 hours to accept the order
+                    order.vendor_accept_due_by = timezone.now() + timedelta(hours=48)
+                    order.save(update_fields=['order_status', 'vendor_accept_due_by', 'updated_at'])
 
                 payment_request.status = 'SUCCESS'
                 payment_request.save(update_fields=['status'])

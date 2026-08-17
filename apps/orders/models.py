@@ -47,6 +47,10 @@ class Order(UUIDModel):
     delivery_fee_kobo = models.PositiveBigIntegerField(default=0)
     total_amount_kobo = models.PositiveBigIntegerField()
     payment_expires_at = models.DateTimeField(db_index=True)
+    vendor_accept_due_by = models.DateTimeField(null=True, blank=True, db_index=True)
+    vendor_accepted_at = models.DateTimeField(null=True, blank=True)
+    prepared_at = models.DateTimeField(null=True, blank=True)
+    ready_for_pickup_at = models.DateTimeField(null=True, blank=True)
     shipping_address_snapshot = models.JSONField(
         help_text="Immutable JSON snapshot of shipping address at time of order creation"
     )

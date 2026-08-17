@@ -6,6 +6,7 @@ from rest_framework.exceptions import ValidationError
 from apps.cart.models import Cart
 from apps.products.models import ProductVariant
 from apps.orders.models import Order, OrderItem, OrderStatus
+from apps.deliveries.services import create_delivery_for_order
 
 
 def create_order_from_cart(user, address) -> Order:
@@ -149,6 +150,127 @@ def cancel_expired_orders() -> int:
 
             order.order_status = OrderStatus.CANCELLED
             order.cancellation_reason = "Payment reservation window expired (30m timeout)"
+            order.save(update_fields=['order_status', 'cancellation_reason', 'updated_at'])
+            cancelled_count += 1
+
+    return cancelled_count
+
+
+def accept_order(order: Order, user) -> Order:
+    """
+    Validates ownership and PAID status, transitions order to VENDOR_ACCEPTED,
+    records vendor_accepted_at.
+    """
+    with transaction.atomic():
+        order = Order.objects.select_for_update().get(id=order.id)
+
+        # Validate ownership: the user must be the vendor associated with the order
+        if order.vendor.user_id != user.id:
+            raise ValidationError({"detail": "You do not own this order."})
+
+        # Validate order status is PAID
+        if order.order_status != OrderStatus.PAID:
+            raise ValidationError({"detail": f"Order must be in PAID status to accept. Current: {order.order_status}"})
+
+        order.order_status = OrderStatus.VENDOR_ACCEPTED
+        order.vendor_accepted_at = timezone.now()
+        order.save(update_fields=['order_status', 'vendor_accepted_at', 'updated_at'])
+
+    return order
+
+
+def move_to_preparing(order: Order, user) -> Order:
+    """
+    Validates VENDOR_ACCEPTED status, transitions to PREPARING, records prepared_at.
+    """
+    with transaction.atomic():
+        order = Order.objects.select_for_update().get(id=order.id)
+
+        # Validate ownership: the user must be the vendor associated with the order
+        if order.vendor.user_id != user.id:
+            raise ValidationError({"detail": "You do not own this order."})
+
+        # Validate order status is VENDOR_ACCEPTED
+        if order.order_status != OrderStatus.VENDOR_ACCEPTED:
+            raise ValidationError({"detail": f"Order must be in VENDOR_ACCEPTED status to start preparing. Current: {order.order_status}"})
+
+        order.order_status = OrderStatus.PREPARING
+        order.prepared_at = timezone.now()
+        order.save(update_fields=['order_status', 'prepared_at', 'updated_at'])
+
+    return order
+
+
+def mark_ready_for_pickup(order: Order, user) -> Order:
+    """
+    Validates PREPARING or VENDOR_ACCEPTED status, transitions to READY_FOR_PICKUP,
+    records ready_for_pickup_at, and triggers Delivery record creation.
+    """
+    with transaction.atomic():
+        order = Order.objects.select_for_update().get(id=order.id)
+
+        # Validate ownership: the user must be the vendor associated with the order
+        if order.vendor.user_id != user.id:
+            raise ValidationError({"detail": "You do not own this order."})
+
+        # Validate order status is PREPARING or VENDOR_ACCEPTED
+        if order.order_status not in [OrderStatus.PREPARING, OrderStatus.VENDOR_ACCEPTED]:
+            raise ValidationError({"detail": f"Order must be in PREPARING or VENDOR_ACCEPTED status to be ready for pickup. Current: {order.order_status}"})
+
+        order.order_status = OrderStatus.READY_FOR_PICKUP
+        order.ready_for_pickup_at = timezone.now()
+        order.save(update_fields=['order_status', 'ready_for_pickup_at', 'updated_at'])
+
+        # Trigger Delivery record creation
+        from apps.deliveries.services import create_delivery_for_order
+        create_delivery_for_order(order, carrier_name='MANUAL_DISPATCH', dispatch_notes='')
+
+    return order
+
+
+def process_vendor_sla_timeouts() -> int:
+    """
+    Pessimistically locks and cancels expired PAID orders (vendor_accept_due_by <= now),
+    restoring variant stock atomically. Only affects orders in PAID status where
+    vendor_accept_due_by has passed and vendor_accepted_at is not yet set.
+    """
+    from apps.orders.models import Order
+    from apps.products.models import ProductVariant
+
+    now = timezone.now()
+    expired_order_ids = list(
+        Order.objects.filter(
+            order_status=OrderStatus.PAID,
+            vendor_accept_due_by__lte=now,
+            vendor_accepted_at__isnull=True
+        ).values_list('id', flat=True)
+    )
+
+    cancelled_count = 0
+    for order_id in expired_order_ids:
+        with transaction.atomic():
+            try:
+                order = Order.objects.select_for_update().get(id=order_id)
+            except Order.DoesNotExist:
+                continue
+
+            # Re-verify status under DB row lock
+            if order.order_status != OrderStatus.PAID:
+                continue
+            # Re-verify SLA has not been accepted yet
+            if order.vendor_accepted_at is not None:
+                continue
+
+            # Restore variant stock
+            items = list(order.items.select_related('variant').all())
+            for item in items:
+                if item.variant:
+                    variant = ProductVariant.objects.select_for_update().get(id=item.variant.id)
+                    variant.stock_quantity += item.quantity
+                    variant.save(update_fields=['stock_quantity', 'updated_at'])
+
+            order.order_status = OrderStatus.CANCELLED
+            order.cancellation_reason = "Vendor SLA Timeout: Order not accepted within 48 hours."
             order.save(update_fields=['order_status', 'cancellation_reason', 'updated_at'])
             cancelled_count += 1
 

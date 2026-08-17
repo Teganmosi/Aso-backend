@@ -57,6 +57,10 @@ class OrderSerializer(serializers.ModelSerializer):
     delivery_fee_naira = serializers.FloatField(read_only=True)
     total_amount_naira = serializers.FloatField(read_only=True)
     is_expired = serializers.BooleanField(read_only=True)
+    vendor_accept_due_by = serializers.DateTimeField(read_only=True)
+    vendor_accepted_at = serializers.DateTimeField(read_only=True)
+    prepared_at = serializers.DateTimeField(read_only=True)
+    ready_for_pickup_at = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = Order
@@ -73,6 +77,10 @@ class OrderSerializer(serializers.ModelSerializer):
             'total_amount_naira',
             'payment_expires_at',
             'is_expired',
+            'vendor_accept_due_by',
+            'vendor_accepted_at',
+            'prepared_at',
+            'ready_for_pickup_at',
             'shipping_address_snapshot',
             'cancellation_reason',
             'items',
@@ -80,3 +88,38 @@ class OrderSerializer(serializers.ModelSerializer):
             'updated_at'
         ]
         read_only_fields = fields
+
+
+class VendorOrderSerializer(serializers.ModelSerializer):
+    """
+    Serializer for vendor-facing order details with embedded delivery snapshot.
+    """
+    items = OrderItemSerializer(many=True, read_only=True)
+    delivery = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Order
+        fields = [
+            'id',
+            'order_number',
+            'order_status',
+            'vendor_accept_due_by',
+            'vendor_accepted_at',
+            'prepared_at',
+            'ready_for_pickup_at',
+            'subtotal_kobo',
+            'delivery_fee_kobo',
+            'total_amount_kobo',
+            'shipping_address_snapshot',
+            'cancellation_reason',
+            'items',
+            'delivery'
+        ]
+
+    def get_delivery(self, order):
+        """Return delivery snapshot if it exists."""
+        delivery = getattr(order, 'delivery', None)
+        if delivery:
+            from apps.deliveries.serializers import DeliverySerializer
+            return DeliverySerializer(delivery).data
+        return None

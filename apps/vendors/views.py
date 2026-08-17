@@ -8,6 +8,9 @@ from .serializers import (
 from .services import register_vendor_service, update_bank_account_service
 from .selectors import get_vendor_by_slug, get_vendor_bank_account
 from apps.common.permissions import IsVendorOwner
+from apps.orders.serializers import VendorOrderSerializer
+from apps.orders.models import Order
+
 
 class VendorRegisterView(APIView):
     """
@@ -91,5 +94,48 @@ class BankAccountView(APIView):
             'message': msg,
             'bank_account': BankAccountSerializer(account).data
         }, status=http_status)
+
+
+class VendorOrderListView(APIView):
+    """
+    GET: List orders for authenticated vendors, filterable by status.
+    Permission: Only the vendor associated with the orders can view them.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        orders = Order.objects.filter(
+            vendor__user=request.user
+        ).select_related('vendor').prefetch_related('items').order_by('-created_at')
+
+        serializer = VendorOrderSerializer(orders, many=True)
+        return Response({
+            'success': True,
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class VendorOrderDetailView(APIView):
+    """
+    GET: Retrieve vendor order detail summary.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, order_id):
+        try:
+            order = Order.objects.select_related('vendor').prefetch_related('items').get(
+                id=order_id,
+                vendor__user=request.user
+            )
+        except Order.DoesNotExist:
+            return Response({
+                'detail': 'Order not found.'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = VendorOrderSerializer(order)
+        return Response({
+            'success': True,
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
 
 
