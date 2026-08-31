@@ -58,6 +58,38 @@ class OrderAdmin(admin.ModelAdmin):
         'updated_at'
     ]
     inlines = [OrderItemInline]
+    actions = ['mark_as_disputed', 'resolve_dispute_complete', 'cancel_and_refund_order']
+
+    @admin.action(description="Mark selected orders as DISPUTED")
+    def mark_as_disputed(self, request, queryset):
+        from apps.orders.models import OrderStatus
+        count = queryset.exclude(order_status__in=[OrderStatus.CANCELLED, OrderStatus.REFUNDED]).update(
+            order_status=OrderStatus.DISPUTED
+        )
+        self.message_user(request, f"{count} order(s) marked as Disputed.")
+
+    @admin.action(description="Resolve dispute: Mark selected orders as COMPLETED")
+    def resolve_dispute_complete(self, request, queryset):
+        from apps.payouts.services import complete_order
+        count = 0
+        for order in queryset:
+            complete_order(order)
+            count += 1
+        self.message_user(request, f"{count} order(s) completed and funds released.")
+
+    @admin.action(description="Cancel and release pending earnings for selected orders")
+    def cancel_and_refund_order(self, request, queryset):
+        from apps.orders.models import OrderStatus
+        from apps.payouts.services import reverse_pending_earning
+        count = 0
+        for order in queryset:
+            if order.order_status not in [OrderStatus.CANCELLED, OrderStatus.REFUNDED, OrderStatus.COMPLETED]:
+                order.order_status = OrderStatus.CANCELLED
+                order.cancellation_reason = "Admin cancelled / dispute refunded"
+                order.save(update_fields=['order_status', 'cancellation_reason', 'updated_at'])
+                reverse_pending_earning(order)
+                count += 1
+        self.message_user(request, f"{count} order(s) cancelled.")
 
 
 @admin.register(OrderItem)
