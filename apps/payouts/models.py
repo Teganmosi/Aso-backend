@@ -81,3 +81,8 @@ class PayoutRequest(UUIDModel):
 
     def __str__(self):
         return f"Payout #{self.reference} for {self.vendor.store_name} - {self.status}"
+
+    @property
+    def amount_naira(self) -> float:
+        return round(self.amount_kobo / 100.0, 2)
+

@@ -11,7 +11,9 @@ from apps.products.serializers import (
     ProductDetailSerializer,
     ProductVariantSerializer,
     ProductMediaSerializer,
-    PresignedUploadUrlRequestSerializer
+    PresignedUploadUrlRequestSerializer,
+    ReviewSerializer,
+    CreateReviewSerializer
 )
 from apps.products.selectors import (
     get_active_categories,
@@ -30,7 +32,8 @@ from apps.products.services import (
     update_product_variant,
     delete_product_variant,
     attach_product_media,
-    delete_product_media
+    delete_product_media,
+    create_verified_review
 )
 from apps.products.utils import generate_presigned_upload_url
 from apps.products.permissions import IsApprovedVendor
@@ -355,3 +358,67 @@ class ProductMediaDetailView(APIView):
             'success': True,
             'message': 'Media asset deleted successfully.'
         }, status=status.HTTP_200_OK)
+
+
+class ProductReviewListCreateView(APIView):
+    """
+    - GET: Public list of verified reviews for a specific product.
+    - POST: Authenticated verified customer review submission.
+    """
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [permissions.IsAuthenticated()]
+        return [permissions.AllowAny()]
+
+    def get(self, request, product_id):
+        product = get_public_product_by_id_or_slug(product_id)
+        reviews = product.reviews.select_related('customer', 'product').all()
+        serializer = ReviewSerializer(reviews, many=True)
+        return Response({
+            'success': True,
+            'count': product.review_count,
+            'average_rating': float(product.average_rating),
+            'reviews': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request, product_id):
+        product = get_public_product_by_id_or_slug(product_id)
+        serializer = CreateReviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        review = create_verified_review(
+            customer=request.user,
+            product=product,
+            order_item_id=serializer.validated_data['order_item_id'],
+            rating=serializer.validated_data['rating'],
+            comment=serializer.validated_data['comment']
+        )
+        return Response({
+            'success': True,
+            'message': 'Review submitted successfully.',
+            'review': ReviewSerializer(review).data
+        }, status=status.HTTP_201_CREATED)
+
+
+class VendorReviewListView(APIView):
+    """
+    Public list of reviews across all products belonging to a designer storefront.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, slug):
+        from apps.vendors.models import VendorProfile, VendorStatus
+        try:
+            vendor = VendorProfile.objects.get(slug=slug, status=VendorStatus.APPROVED)
+        except VendorProfile.DoesNotExist:
+            raise Http404('Vendor not found.')
+
+        reviews = vendor.reviews.select_related('customer', 'product').all()
+        serializer = ReviewSerializer(reviews, many=True)
+        return Response({
+            'success': True,
+            'count': vendor.review_count,
+            'average_rating': float(vendor.average_rating),
+            'reviews': serializer.data
+        }, status=status.HTTP_200_OK)
+

@@ -234,3 +234,40 @@ class ProductMedia(UUIDModel):
     def __str__(self):
         return f"{self.media_type} for {self.product.title} (Order: {self.display_order})"
 
+
+class Review(UUIDModel):
+    """
+    Verified buyer review linked to an individual completed OrderItem.
+    """
+    order_item = models.OneToOneField(
+        'orders.OrderItem',
+        on_delete=models.CASCADE,
+        related_name='review'
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='reviews'
+    )
+    vendor = models.ForeignKey(
+        VendorProfile,
+        on_delete=models.CASCADE,
+        related_name='reviews'
+    )
+    customer = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.CASCADE,
+        related_name='reviews'
+    )
+    rating = models.PositiveSmallIntegerField()
+    comment = models.TextField()
+    is_verified_purchase = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'products_review'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.rating}★ Review by {self.customer.email} on {self.product.title}"
+
+

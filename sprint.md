@@ -20,7 +20,7 @@ A sprint is strictly defined as **DONE** when:
 - [x] **Sprint 7: Paystack Payment Gateway & Idempotent Webhook Engine**
 - [x] **Sprint 8: Vendor Order SLA (48h) & Delivery Dispatch Coordination**
 - [x] **Sprint 9: Financial Ledger, Customer Protection Window (72h) & Payout Engine**
-- [ ] **Sprint 10: Verified Buyer Reviews, Email Notifications & Launch Polish**
+- [x] **Sprint 10: Verified Buyer Reviews, Email Notifications & Launch Polish**
 
 ---
 

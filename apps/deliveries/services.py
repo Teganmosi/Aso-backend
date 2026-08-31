@@ -81,4 +81,9 @@ def update_delivery_status(delivery: Delivery, new_status: str, notes: str = Non
             order.order_status = status_mapping[new_status]
             order.save(update_fields=['order_status', 'updated_at'])
 
+    # Dispatch tracking email to customer when out for delivery
+    if new_status == DeliveryStatus.IN_TRANSIT:
+        from apps.common.notifications import send_order_dispatched_notification
+        send_order_dispatched_notification(delivery)
+
     return delivery

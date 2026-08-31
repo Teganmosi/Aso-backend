@@ -190,6 +190,10 @@ def complete_order(order: Order) -> Order:
             order=order
         )
 
+    # Dispatch order completed email
+    from apps.common.notifications import send_order_completed_notification
+    send_order_completed_notification(order)
+
     return order
 
 
@@ -258,6 +262,10 @@ def request_payout(vendor_profile: VendorProfile, amount_kobo: int) -> PayoutReq
             entry_type=LedgerEntryType.PAYOUT_RESERVE,
             payout_request=payout_request
         )
+
+    # Dispatch payout initiated email
+    from apps.common.notifications import send_payout_initiated_notification
+    send_payout_initiated_notification(payout_request)
 
     return payout_request
 

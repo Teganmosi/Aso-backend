@@ -1,5 +1,6 @@
 from django.contrib import admin
-from apps.products.models import Category, Product, ProductVariant, ProductMedia, ApprovalStatus, ProductStatus
+from apps.products.models import Category, Product, ProductVariant, ProductMedia, Review, ApprovalStatus, ProductStatus
+
 
 
 class ProductVariantInline(admin.TabularInline):
@@ -71,3 +72,12 @@ class ProductMediaAdmin(admin.ModelAdmin):
     list_display = ['product', 'media_type', 'url', 'display_order', 'is_primary', 'created_at']
     list_filter = ['media_type', 'is_primary']
     search_fields = ['url', 'product__title']
+
+
+@admin.register(Review)
+class ReviewAdmin(admin.ModelAdmin):
+    list_display = ['product', 'vendor', 'customer', 'rating', 'is_verified_purchase', 'created_at']
+    list_filter = ['rating', 'is_verified_purchase', 'created_at']
+    search_fields = ['product__title', 'vendor__store_name', 'customer__email', 'comment']
+    readonly_fields = ['order_item', 'product', 'vendor', 'customer', 'created_at', 'updated_at']
+

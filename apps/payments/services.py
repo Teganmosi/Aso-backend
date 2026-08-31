@@ -215,6 +215,10 @@ def verify_and_process_webhook(
                     from apps.payouts.services import record_pending_earning
                     record_pending_earning(order)
 
+                    # Dispatch payment received notification
+                    from apps.common.notifications import send_payment_received_notification
+                    send_payment_received_notification(order)
+
                 payment_request.status = 'SUCCESS'
                 payment_request.save(update_fields=['status'])
 

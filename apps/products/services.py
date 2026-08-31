@@ -1,7 +1,9 @@
+from decimal import Decimal
 from django.conf import settings
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 from apps.products.models import Product, Category, ApprovalStatus, ProductStatus
+
 
 
 @transaction.atomic
@@ -171,4 +173,68 @@ def delete_product_media(media: ProductMedia) -> None:
     Deletes a product media item.
     """
     media.delete()
+
+
+@transaction.atomic
+def create_verified_review(customer, product: Product, order_item_id, rating: int, comment: str) -> 'Review':
+    """
+    Creates a verified buyer review linked to an individual completed OrderItem.
+    Synchronously recalculates rating metrics on Product and VendorProfile.
+    """
+    from apps.orders.models import OrderItem, OrderStatus
+    from apps.products.models import Review
+    from django.db.models import Avg
+
+    if not (1 <= rating <= 5):
+        raise ValidationError({"rating": "Rating must be an integer between 1 and 5."})
+
+    try:
+        order_item = OrderItem.objects.select_related('order', 'variant__product').get(id=order_item_id)
+    except OrderItem.DoesNotExist:
+        raise ValidationError({"order_item_id": "Order item not found."})
+
+    # Validate buyer ownership
+    if order_item.order.customer_id != customer.id:
+        raise ValidationError({"detail": "You can only review items you purchased."})
+
+    # Validate order completion
+    if order_item.order.order_status != OrderStatus.COMPLETED:
+        raise ValidationError({"detail": "You can only review products from completed orders."})
+
+    # Validate product association
+    if order_item.variant and order_item.variant.product_id != product.id:
+        raise ValidationError({"detail": "Order item does not belong to this product."})
+
+    # Validate duplicate review
+    if Review.objects.filter(order_item=order_item).exists():
+        raise ValidationError({"detail": "You have already reviewed this purchased item."})
+
+    # Create review
+    review = Review.objects.create(
+        order_item=order_item,
+        product=product,
+        vendor=product.vendor,
+        customer=customer,
+        rating=rating,
+        comment=comment,
+        is_verified_purchase=True
+    )
+
+    # Synchronously update Product aggregate rating
+    product_reviews = Review.objects.filter(product=product)
+    product_avg = product_reviews.aggregate(avg=Avg('rating'))['avg'] or 0.0
+    product.average_rating = round(Decimal(str(product_avg)), 2)
+    product.review_count = product_reviews.count()
+    product.save(update_fields=['average_rating', 'review_count'])
+
+    # Synchronously update VendorProfile aggregate rating
+    vendor = product.vendor
+    vendor_reviews = Review.objects.filter(vendor=vendor)
+    vendor_avg = vendor_reviews.aggregate(avg=Avg('rating'))['avg'] or 0.0
+    vendor.average_rating = round(Decimal(str(vendor_avg)), 2)
+    vendor.review_count = vendor_reviews.count()
+    vendor.save(update_fields=['average_rating', 'review_count'])
+
+    return review
+
 

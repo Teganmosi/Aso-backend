@@ -113,6 +113,10 @@ def create_order_from_cart(user, address) -> Order:
         cart.vendor = None
         cart.save(update_fields=['vendor', 'updated_at'])
 
+        # Dispatch order placed notification
+        from apps.common.notifications import send_order_placed_notification
+        send_order_placed_notification(order)
+
         return order
 
 

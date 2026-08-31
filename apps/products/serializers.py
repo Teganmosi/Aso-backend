@@ -4,6 +4,7 @@ from apps.products.models import (
     Product,
     ProductVariant,
     ProductMedia,
+    Review,
     ApprovalStatus,
     ProductStatus,
     MediaType
@@ -287,3 +288,42 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             if item.media_type == MediaType.IMAGE:
                 return item.url
         return None
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    """
+    Public serializer for customer product and designer reviews.
+    """
+    customer_name = serializers.SerializerMethodField()
+    product_title = serializers.CharField(source='product.title', read_only=True)
+
+    class Meta:
+        model = Review
+        fields = [
+            'id',
+            'product',
+            'product_title',
+            'vendor',
+            'customer_name',
+            'rating',
+            'comment',
+            'is_verified_purchase',
+            'created_at'
+        ]
+        read_only_fields = fields
+
+    def get_customer_name(self, obj) -> str:
+        if obj.customer.first_name:
+            last_initial = f" {obj.customer.last_name[0]}." if obj.customer.last_name else ""
+            return f"{obj.customer.first_name}{last_initial}"
+        return "Verified Customer"
+
+
+class CreateReviewSerializer(serializers.Serializer):
+    """
+    Validation serializer for submitting a verified buyer review.
+    """
+    order_item_id = serializers.UUIDField(required=True)
+    rating = serializers.IntegerField(required=True, min_value=1, max_value=5)
+    comment = serializers.CharField(required=True, max_length=2000, allow_blank=False)
+

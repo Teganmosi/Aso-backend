@@ -10,7 +10,8 @@ from apps.products.views import (
     ProductVariantListCreateView,
     ProductVariantDetailView,
     ProductMediaListCreateView,
-    ProductMediaDetailView
+    ProductMediaDetailView,
+    ProductReviewListCreateView
 )
 
 urlpatterns = [
@@ -20,6 +21,9 @@ urlpatterns = [
 
     # Presigned S3/R2 Upload URL Generator
     path('products/upload-url/', PresignedUploadUrlView.as_view(), name='product-upload-url'),
+
+    # Product Reviews
+    path('products/<str:product_id>/reviews/', ProductReviewListCreateView.as_view(), name='product-review-list-create'),
 
     # Public Product Catalog & Vendor Creation Endpoints
     path('products/', PublicProductListView.as_view(), name='product-list-create'),
