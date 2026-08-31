@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'apps.orders',
     'apps.payments',
     'apps.deliveries',
+    'apps.payouts',
 ]
 
 MIDDLEWARE = [
@@ -156,3 +157,7 @@ CSRF_TRUSTED_ORIGINS = [
 # Paystack Payment Gateway Settings
 PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', '')
 PAYSTACK_PUBLIC_KEY = os.environ.get('PAYSTACK_PUBLIC_KEY', '')
+
+# Marketplace Commission Settings
+ASO_MARKETPLACE_COMMISSION_RATE = 0.10
+

@@ -272,6 +272,11 @@ def process_vendor_sla_timeouts() -> int:
             order.order_status = OrderStatus.CANCELLED
             order.cancellation_reason = "Vendor SLA Timeout: Order not accepted within 48 hours."
             order.save(update_fields=['order_status', 'cancellation_reason', 'updated_at'])
+
+            # Reverse pending earning
+            from apps.payouts.services import reverse_pending_earning
+            reverse_pending_earning(order)
+
             cancelled_count += 1
 
     return cancelled_count

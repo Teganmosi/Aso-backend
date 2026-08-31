@@ -211,6 +211,10 @@ def verify_and_process_webhook(
                     order.vendor_accept_due_by = timezone.now() + timedelta(hours=48)
                     order.save(update_fields=['order_status', 'vendor_accept_due_by', 'updated_at'])
 
+                    # Record pending earning in ledger
+                    from apps.payouts.services import record_pending_earning
+                    record_pending_earning(order)
+
                 payment_request.status = 'SUCCESS'
                 payment_request.save(update_fields=['status'])
 
@@ -218,6 +222,19 @@ def verify_and_process_webhook(
             if payment_request is not None:
                 payment_request.status = 'FAILED'
                 payment_request.save(update_fields=['status'])
+
+        elif event in ('transfer.success', 'transfer.failed', 'transfer.reversed'):
+            from apps.payouts.models import PayoutRequest
+            from apps.payouts.services import succeed_payout, fail_payout
+            try:
+                payout_req = PayoutRequest.objects.select_for_update().get(reference=reference)
+                if event == 'transfer.success':
+                    succeed_payout(payout_req)
+                else:
+                    fail_reason = event_data.get('data', {}).get('reason') or f"Paystack Transfer failed: {event}"
+                    fail_payout(payout_req, fail_reason)
+            except PayoutRequest.DoesNotExist:
+                pass
 
         # Mark webhook as processed atomically
         model_instance.processed = True
