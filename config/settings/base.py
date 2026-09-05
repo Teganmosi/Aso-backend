@@ -79,19 +79,26 @@ DB_PORT = os.environ.get('DB_PORT', '5432')
 
 DB_SSLMODE = os.environ.get('DB_SSLMODE', '')
 
-DATABASES = {
-    'default': {
-        'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.postgresql'),
-        'NAME': DB_NAME,
-        'USER': DB_USER,
-        'PASSWORD': DB_PASSWORD,
-        'HOST': DB_HOST,
-        'PORT': DB_PORT,
+if os.environ.get('USE_SQLITE', 'False') == 'True':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
-
-if DB_SSLMODE:
-    DATABASES['default']['OPTIONS'] = {'sslmode': DB_SSLMODE}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.postgresql'),
+            'NAME': DB_NAME,
+            'USER': DB_USER,
+            'PASSWORD': DB_PASSWORD,
+            'HOST': DB_HOST,
+            'PORT': DB_PORT,
+        }
+    }
+    if DB_SSLMODE:
+        DATABASES['default']['OPTIONS'] = {'sslmode': DB_SSLMODE}
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -146,12 +153,28 @@ CORS_ALLOWED_ORIGINS = [
     'http://127.0.0.1:3000',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174',
+    'http://localhost:5175',
+    'http://127.0.0.1:5175',
+    'http://localhost:4173',
+    'http://127.0.0.1:4173',
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
 ]
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174',
+    'http://localhost:5175',
+    'http://127.0.0.1:5175',
+    'http://localhost:4173',
+    'http://127.0.0.1:4173',
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
 ]
 
 # Paystack Payment Gateway Settings
