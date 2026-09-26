@@ -6,7 +6,8 @@ from django.shortcuts import get_object_or_404
 from apps.orders.models import Order, OrderStatus
 from .models import PaymentRequest
 from .serializers import PaymentRequestSerializer
-from .services import initialize_payment, verify_and_process_webhook
+from .services import initialize_payment, verify_and_process_webhook, verify_transaction_with_paystack
+from apps.orders.serializers import OrderSerializer
 
 
 class PaymentInitializeView(APIView):
@@ -85,4 +86,43 @@ class PaymentWebhookView(APIView):
         return Response({
             'success': True,
             'data': {'message': message}
+        }, status=status.HTTP_200_OK)
+
+class PaymentVerifyView(APIView):
+    """
+    GET: Verify payment status synchronously with Paystack API.
+    Supports either path parameter /api/v1/payments/verify/<reference>/
+    or query parameter ?reference=<ref> or ?order_id=<uuid>.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, reference=None):
+        ref = reference or request.query_params.get('reference') or request.query_params.get('trxref')
+        order_id = request.query_params.get('order_id')
+
+        if not ref and order_id:
+            order = get_object_or_404(Order, id=order_id, customer=request.user)
+            pr = PaymentRequest.objects.filter(order=order).order_by('-created_at').first()
+            if pr:
+                ref = pr.reference
+
+        if not ref:
+            return Response({
+                'detail': 'Transaction reference or order_id is required.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        is_success, order, message = verify_transaction_with_paystack(ref)
+
+        if not is_success:
+            return Response({
+                'success': False,
+                'message': message,
+                'order_status': order.order_status if order else None
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            'success': True,
+            'message': message,
+            'order_status': order.order_status if order else None,
+            'order': OrderSerializer(order).data if order else None
         }, status=status.HTTP_200_OK)

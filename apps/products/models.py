@@ -107,6 +107,11 @@ class Product(UUIDModel):
 
     average_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
     review_count = models.PositiveIntegerField(default=0)
+    size_chart = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Temu-style structured sizing and measurement guide data configured by the designer."
+    )
 
     class Meta:
         db_table = 'products_product'

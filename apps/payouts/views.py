@@ -4,8 +4,9 @@ from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 
 from apps.common.permissions import IsVendorOwner
+from .models import PayoutRequest, LedgerEntry
 from apps.vendors.serializers import VendorProfileSerializer
-from .serializers import VendorBalanceSerializer, PayoutWithdrawalSerializer, PayoutRequestSerializer
+from .serializers import VendorBalanceSerializer, PayoutWithdrawalSerializer, PayoutRequestSerializer, LedgerEntrySerializer
 from .services import get_or_create_vendor_balance, request_payout, process_payout, resolve_and_verify_kyc
 
 
@@ -78,4 +79,37 @@ class VendorVerifyKYCView(APIView):
             'success': True,
             'message': 'KYC verification process completed.',
             'vendor': VendorProfileSerializer(vendor_profile).data
+        }, status=status.HTTP_200_OK)
+
+
+class PayoutRequestsView(APIView):
+    """
+    GET: Lists all payout requests for the authenticated vendor.
+    """
+    permission_classes = [IsVendorOwner]
+
+    def get(self, request):
+        vendor_profile = request.user.vendor_profile
+        requests_qs = PayoutRequest.objects.filter(vendor=vendor_profile).order_by('-created_at')
+        serializer = PayoutRequestSerializer(requests_qs, many=True)
+        return Response({
+            'success': True,
+            'payout_requests': serializer.data,
+            'requests': serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class LedgerListView(APIView):
+    """
+    GET: Lists financial ledger entries for the authenticated vendor.
+    """
+    permission_classes = [IsVendorOwner]
+
+    def get(self, request):
+        vendor_profile = request.user.vendor_profile
+        ledger_qs = LedgerEntry.objects.filter(vendor=vendor_profile).order_by('-created_at')
+        serializer = LedgerEntrySerializer(ledger_qs, many=True)
+        return Response({
+            'success': True,
+            'ledger': serializer.data
         }, status=status.HTTP_200_OK)

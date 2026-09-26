@@ -16,6 +16,7 @@ staticfiles/
 .coverage
 htmlcov/
 *.log
+logs/
 .DS_Store
 cookies.txt
 

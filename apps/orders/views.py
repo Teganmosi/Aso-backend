@@ -16,9 +16,20 @@ class OrderListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        orders = Order.objects.filter(
-            customer=request.user
-        ).select_related('vendor').prefetch_related('items').order_by('-created_at')
+        queryset = Order.objects.filter(customer=request.user)
+        status_param = request.query_params.get('status')
+        if status_param:
+            status_param = status_param.upper()
+            if status_param == 'PROCESSING':
+                queryset = queryset.filter(order_status__in=['PAID', 'VENDOR_ACCEPTED', 'PREPARING'])
+            elif status_param == 'IN_TRANSIT':
+                queryset = queryset.filter(order_status__in=['PICKED_UP', 'OUT_FOR_DELIVERY'])
+            elif status_param == 'COMPLETED':
+                queryset = queryset.filter(order_status__in=['DELIVERED', 'COMPLETED'])
+            elif status_param != 'ALL':
+                queryset = queryset.filter(order_status=status_param)
+
+        orders = queryset.select_related('vendor').prefetch_related('items').order_by('-created_at')
 
         serializer = OrderSerializer(orders, many=True)
         return Response({

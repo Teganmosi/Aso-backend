@@ -2,28 +2,73 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
-from apps.products.models import Product, Category, ApprovalStatus, ProductStatus
+from django.utils.text import slugify
+from apps.products.models import Product, ProductVariant, Category, ApprovalStatus, ProductStatus
 
 
 
 @transaction.atomic
 def create_product(vendor_profile, validated_data: dict) -> Product:
     """
-    Creates a new product for an approved vendor.
-    Initial approval status defaults to PENDING.
+    Creates a new product for a vendor.
+    Creates size/color variants and persists structured size chart specs.
     """
     category_id = validated_data.pop('category_id')
     category = Category.objects.get(id=category_id)
 
-    status = validated_data.pop('status', ProductStatus.DRAFT)
+    status = validated_data.pop('status', ProductStatus.PUBLISHED)
+    approval_status = validated_data.pop('approval_status', ApprovalStatus.APPROVED)
+    sizes = validated_data.pop('sizes', None)
+    colors = validated_data.pop('colors', None)
+    stock_qty = validated_data.pop('stock_quantity', 10) or 10
+    size_chart = validated_data.pop('size_chart', None)
 
     product = Product.objects.create(
         vendor=vendor_profile,
         category=category,
-        approval_status=ApprovalStatus.PENDING,
+        approval_status=approval_status,
         status=status,
+        size_chart=size_chart or {},
         **validated_data
     )
+
+    clean_sizes = [str(s).strip() for s in sizes if str(s).strip()] if sizes else []
+    clean_colors = [str(c).strip() for c in colors if str(c).strip()] if colors else []
+
+    # Create real variants for each size/color combo selected by the designer
+    if clean_sizes:
+        for sz in clean_sizes:
+            size_code = slugify(sz).upper() or 'SZ'
+            if clean_colors:
+                for cl in clean_colors:
+                    color_code = slugify(cl).upper() or 'CLR'
+                    ProductVariant.objects.create(
+                        product=product,
+                        size=sz,
+                        color=cl,
+                        sku=f"{product.slug[:14]}-{size_code[:4]}-{color_code[:4]}".upper(),
+                        stock_quantity=stock_qty,
+                        is_active=True
+                    )
+            else:
+                ProductVariant.objects.create(
+                    product=product,
+                    size=sz,
+                    color='Standard',
+                    sku=f"{product.slug[:18]}-{size_code[:6]}".upper(),
+                    stock_quantity=stock_qty,
+                    is_active=True
+                )
+    elif not product.variants.exists():
+        ProductVariant.objects.create(
+            product=product,
+            size='Free Size',
+            color='Standard',
+            sku=f"{product.slug[:25]}-STD".upper(),
+            stock_quantity=stock_qty,
+            is_active=True
+        )
+
     return product
 
 
@@ -36,6 +81,10 @@ def update_product(product: Product, validated_data: dict) -> Product:
     if 'category_id' in validated_data:
         category_id = validated_data.pop('category_id')
         product.category = Category.objects.get(id=category_id)
+
+    sizes = validated_data.pop('sizes', None)
+    colors = validated_data.pop('colors', None)
+    stock_qty = validated_data.pop('stock_quantity', None)
 
     requires_reapproval = False
     reapproval_fields = ['title', 'description', 'base_price_kobo']
@@ -50,6 +99,51 @@ def update_product(product: Product, validated_data: dict) -> Product:
         product.approval_status = ApprovalStatus.PENDING
 
     product.save()
+
+    # If sizes or colors were updated, sync variants
+    if sizes is not None and isinstance(sizes, list) and len(sizes) > 0:
+        clean_sizes = [str(s).strip() for s in sizes if str(s).strip()]
+        clean_colors = [str(c).strip() for c in colors if str(c).strip()] if colors else []
+        qty = stock_qty if stock_qty is not None else 10
+
+        # Deactivate old variants not in new sizes
+        product.variants.exclude(size__in=clean_sizes).update(is_active=False)
+
+        for sz in clean_sizes:
+            size_code = slugify(sz).upper() or 'SZ'
+            if clean_colors:
+                for cl in clean_colors:
+                    color_code = slugify(cl).upper() or 'CLR'
+                    variant, _ = ProductVariant.objects.get_or_create(
+                        product=product,
+                        size=sz,
+                        color=cl,
+                        defaults={
+                            'sku': f"{product.slug[:14]}-{size_code[:4]}-{color_code[:4]}".upper(),
+                            'stock_quantity': qty,
+                            'is_active': True
+                        }
+                    )
+                    variant.is_active = True
+                    if stock_qty is not None:
+                        variant.stock_quantity = qty
+                    variant.save()
+            else:
+                variant, _ = ProductVariant.objects.get_or_create(
+                    product=product,
+                    size=sz,
+                    color='Standard',
+                    defaults={
+                        'sku': f"{product.slug[:18]}-{size_code[:6]}".upper(),
+                        'stock_quantity': qty,
+                        'is_active': True
+                    }
+                )
+                variant.is_active = True
+                if stock_qty is not None:
+                    variant.stock_quantity = qty
+                variant.save()
+
     return product
 
 
@@ -80,10 +174,11 @@ def reject_product(product: Product, reason: str = None) -> Product:
 @transaction.atomic
 def delete_product(product: Product) -> None:
     """
-    Soft deletes a product.
+    Soft deletes and archives a product, preserving historical orders.
     """
     product.is_active = False
-    product.save(update_fields=['is_active'])
+    product.status = ProductStatus.ARCHIVED
+    product.save(update_fields=['is_active', 'status'])
 
 
 from apps.products.models import ProductVariant, ProductMedia

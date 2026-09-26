@@ -1,23 +1,36 @@
-version: '3.8'
+﻿version: '3.8'
 
 services:
   db:
-    image: postgres:16-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    image: aso-postgres:16
     container_name: aso_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: aso_db
       POSTGRES_USER: aso_user
       POSTGRES_PASSWORD: aso_password
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5433}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - aso_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aso_user -d aso_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
     container_name: aso_redis
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - aso_redis_data:/data
 
 volumes:
-  postgres_data:
+  aso_postgres_data:
+  aso_redis_data:

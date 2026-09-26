@@ -1,4 +1,4 @@
-import os
+﻿import os
 from pathlib import Path
 import dotenv
 
@@ -9,7 +9,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-aso-marketplace-local
 
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0,.ngrok-free.app,.ngrok-free.dev,.ngrok.io,testserver').split(',')
 
 # Custom User Model
 AUTH_USER_MODEL = 'accounts.User'
@@ -142,7 +142,9 @@ REST_FRAMEWORK = {
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
-SESSION_COOKIE_AGE = 60 * 60 * 24 * 7  # 7 Days
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 30  # 30 Days persistence
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_SAVE_EVERY_REQUEST = True  # Automatically renew session expiry on each request
 
 CSRF_COOKIE_HTTPONLY = False  # Allows frontend JS to read CSRF token cookie to send X-CSRFToken header
 CSRF_COOKIE_SAMESITE = 'Lax'
@@ -184,3 +186,81 @@ PAYSTACK_PUBLIC_KEY = os.environ.get('PAYSTACK_PUBLIC_KEY', '')
 # Marketplace Commission Settings
 ASO_MARKETPLACE_COMMISSION_RATE = 0.10
 
+# Logging Configuration
+import os
+# Prefer local app data or system temp to avoid Google Drive virtual mount flush/tell OSError Errno 28
+local_dir = os.environ.get('LOCALAPPDATA') or os.path.expanduser('~')
+LOGS_DIR = Path(local_dir) / 'AsoBackendLogs'
+try:
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    LOGS_DIR = BASE_DIR / 'logs'
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] [{levelname}] [{name}] {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '[{levelname}] {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': str(LOGS_DIR / 'backend.log'),
+            'maxBytes': 1024 * 1024 * 5,  # 5 MB
+            'backupCount': 5,
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+        },
+        'error_file': {
+            'level': 'ERROR',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': str(LOGS_DIR / 'errors.log'),
+            'maxBytes': 1024 * 1024 * 5,  # 5 MB
+            'backupCount': 5,
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console', 'file', 'error_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.server': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'apps': {
+            'handlers': ['console', 'file', 'error_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'INFO',
+    },
+}
+
+
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')

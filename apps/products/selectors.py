@@ -28,31 +28,35 @@ def get_category_by_slug(slug: str) -> Category:
 
 def _public_product_qs():
     """
-    Base queryset for products visible on the public marketplace.
-    Strictly enforces visibility rules:
-    - approval_status == APPROVED
-    - status == PUBLISHED
-    - is_active == True
-    - vendor.status == APPROVED
+    Base queryset for products visible on the public marketplace:
+    - Published products (status == PUBLISHED, is_active == True)
+    - Vendor not SUSPENDED
+    - approval_status not REJECTED
     """
     return Product.objects.filter(
-        approval_status=ApprovalStatus.APPROVED,
         status=ProductStatus.PUBLISHED,
-        is_active=True,
-        vendor__status=VendorStatus.APPROVED
+        is_active=True
+    ).exclude(
+        vendor__status=VendorStatus.SUSPENDED
+    ).exclude(
+        approval_status=ApprovalStatus.REJECTED
     ).select_related('vendor', 'category').prefetch_related('media', 'variants')
 
 
 def get_public_products(
     search=None,
     category_slug=None,
+    collection_slug=None,
     vendor_slug=None,
     min_price=None,
     max_price=None,
+    min_lead_time=None,
+    max_lead_time=None,
     sort_by=None
 ):
     """
     Query selector for public product catalog with search, filtering, and sorting.
+    Supports collection/gender root filtering, category child filtering, vendor, price, SLA lead times, and sorting.
     """
     qs = _public_product_qs()
 
@@ -66,7 +70,17 @@ def get_public_products(
                 Q(vendor__store_name__icontains=search_term)
             )
 
-    # Category filter (including child categories)
+    # Collection/Gender filter (e.g. 'men', 'women', 'traditional-bridal')
+    if collection_slug:
+        try:
+            col_cat = Category.objects.get(slug=collection_slug, is_active=True)
+            col_child_ids = list(col_cat.children.filter(is_active=True).values_list('id', flat=True))
+            col_cat_ids = [col_cat.id] + col_child_ids
+            qs = qs.filter(category_id__in=col_cat_ids)
+        except Category.DoesNotExist:
+            qs = Product.objects.none()
+
+    # Category filter (specific category or subcategory)
     if category_slug:
         try:
             category = Category.objects.get(slug=category_slug, is_active=True)
@@ -76,9 +90,14 @@ def get_public_products(
         except Category.DoesNotExist:
             qs = Product.objects.none()
 
-    # Vendor filter
+    # Vendor filter (supports vendor slug or vendor UUID)
     if vendor_slug:
-        qs = qs.filter(vendor__slug=vendor_slug)
+        import uuid
+        try:
+            val_uuid = uuid.UUID(str(vendor_slug))
+            qs = qs.filter(Q(vendor_id=val_uuid) | Q(vendor__slug=vendor_slug))
+        except (ValueError, TypeError, AttributeError):
+            qs = qs.filter(vendor__slug=vendor_slug)
 
     # Price range filters (in Kobo)
     if min_price is not None:
@@ -92,6 +111,21 @@ def get_public_products(
         try:
             max_kobo = int(max_price)
             qs = qs.filter(base_price_kobo__lte=max_kobo)
+        except (ValueError, TypeError):
+            pass
+
+    # Lead time / preparation SLA filters (in days)
+    if min_lead_time is not None:
+        try:
+            min_days = int(min_lead_time)
+            qs = qs.filter(preparation_time_days__gte=min_days)
+        except (ValueError, TypeError):
+            pass
+
+    if max_lead_time is not None:
+        try:
+            max_days = int(max_lead_time)
+            qs = qs.filter(preparation_time_days__lte=max_days)
         except (ValueError, TypeError):
             pass
 

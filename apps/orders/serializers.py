@@ -23,10 +23,11 @@ class OrderCreateSerializer(serializers.Serializer):
 
 class OrderItemSerializer(serializers.ModelSerializer):
     """
-    Serializer for order items containing snapshotted product info.
+    Serializer for order items containing snapshotted product info and primary product media.
     """
     unit_price_naira = serializers.FloatField(read_only=True)
     total_price_naira = serializers.FloatField(read_only=True)
+    product_image = serializers.SerializerMethodField()
 
     class Meta:
         model = OrderItem
@@ -42,9 +43,17 @@ class OrderItemSerializer(serializers.ModelSerializer):
             'quantity',
             'total_price_kobo',
             'total_price_naira',
+            'product_image',
             'created_at'
         ]
         read_only_fields = fields
+
+    def get_product_image(self, obj) -> str:
+        if obj.variant and obj.variant.product:
+            media = obj.variant.product.media.filter(is_primary=True).first() or obj.variant.product.media.first()
+            if media:
+                return media.thumbnail_url or media.url or ''
+        return ''
 
 
 class OrderSerializer(serializers.ModelSerializer):
@@ -96,6 +105,10 @@ class VendorOrderSerializer(serializers.ModelSerializer):
     """
     items = OrderItemSerializer(many=True, read_only=True)
     delivery = serializers.SerializerMethodField()
+    subtotal_naira = serializers.FloatField(read_only=True)
+    delivery_fee_naira = serializers.FloatField(read_only=True)
+    total_amount_naira = serializers.FloatField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = Order
@@ -108,12 +121,16 @@ class VendorOrderSerializer(serializers.ModelSerializer):
             'prepared_at',
             'ready_for_pickup_at',
             'subtotal_kobo',
+            'subtotal_naira',
             'delivery_fee_kobo',
+            'delivery_fee_naira',
             'total_amount_kobo',
+            'total_amount_naira',
             'shipping_address_snapshot',
             'cancellation_reason',
             'items',
-            'delivery'
+            'delivery',
+            'created_at'
         ]
 
     def get_delivery(self, order):

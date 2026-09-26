@@ -10,3 +10,12 @@ if os.environ.get('USE_SQLITE', 'False') == 'True':
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+
+# Automatically allow all hosts and ngrok tunnels in local development
+ALLOWED_HOSTS = ['*']
+
+CSRF_TRUSTED_ORIGINS += [
+    'https://*.ngrok-free.app',
+    'https://*.ngrok-free.dev',
+    'https://*.ngrok.io',
+]

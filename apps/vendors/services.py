@@ -35,7 +35,7 @@ def register_vendor_service(
             landmark=landmark or None,
             nin_number=nin_number or None,
             cac_number=cac_number or None,
-            status=VendorStatus.PENDING
+            status=VendorStatus.APPROVED
         )
 
         if bank_data and all(k in bank_data for k in ['account_name', 'account_number', 'bank_name', 'bank_code']):

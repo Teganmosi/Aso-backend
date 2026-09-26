@@ -307,6 +307,7 @@ def process_payout(payout_request: PayoutRequest) -> PayoutRequest:
                 headers={
                     "Authorization": f"Bearer {secret_key}",
                     "Content-Type": "application/json",
+                    "User-Agent": "AsoMarketplace/1.0",
                 },
                 method="POST",
             )
@@ -346,6 +347,7 @@ def process_payout(payout_request: PayoutRequest) -> PayoutRequest:
             headers={
                 "Authorization": f"Bearer {secret_key}",
                 "Content-Type": "application/json",
+                "User-Agent": "AsoMarketplace/1.0",
             },
             method="POST",
         )
@@ -432,6 +434,7 @@ def resolve_and_verify_kyc(vendor_profile: VendorProfile) -> VendorProfile:
             headers={
                 "Authorization": f"Bearer {secret_key}",
                 "Content-Type": "application/json",
+                "User-Agent": "AsoMarketplace/1.0",
             },
             method="GET",
         )

@@ -1,0 +1,6 @@
+﻿-- Aso Marketplace PostgreSQL Initialization
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+CREATE EXTENSION IF NOT EXISTS "unaccent";
+
+GRANT ALL PRIVILEGES ON DATABASE aso_db TO aso_user;

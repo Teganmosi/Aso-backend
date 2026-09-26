@@ -41,12 +41,14 @@ from apps.products.permissions import IsApprovedVendor
 
 class CategoryListView(APIView):
     """
-    Public category list endpoint returning the category tree hierarchy.
+    Public category list endpoint returning categories.
+    If parent_only=true, returns only root collections; otherwise returns all active categories.
     """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        categories = get_active_categories(parent_only=True)
+        parent_only_param = request.query_params.get('parent_only', 'false').lower() == 'true'
+        categories = get_active_categories(parent_only=parent_only_param)
         serializer = CategorySerializer(categories, many=True)
         return Response({
             'success': True,
@@ -84,17 +86,23 @@ class PublicProductListView(APIView):
     def get(self, request):
         search = request.query_params.get('search')
         category_slug = request.query_params.get('category')
+        collection_slug = request.query_params.get('collection')
         vendor_slug = request.query_params.get('vendor')
         min_price = request.query_params.get('min_price')
         max_price = request.query_params.get('max_price')
+        min_lead_time = request.query_params.get('min_lead_time')
+        max_lead_time = request.query_params.get('max_lead_time')
         sort_by = request.query_params.get('sort')
 
         products = get_public_products(
             search=search,
             category_slug=category_slug,
+            collection_slug=collection_slug,
             vendor_slug=vendor_slug,
             min_price=min_price,
             max_price=max_price,
+            min_lead_time=min_lead_time,
+            max_lead_time=max_lead_time,
             sort_by=sort_by
         )
 

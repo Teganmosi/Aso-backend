@@ -16,7 +16,7 @@ def create_order_from_cart(user, address) -> Order:
     """
     with transaction.atomic():
         try:
-            cart = Cart.objects.select_for_update().select_related('vendor').get(user=user)
+            cart = Cart.objects.select_for_update(of=('self',)).select_related('vendor').get(user=user)
         except Cart.DoesNotExist:
             raise ValidationError({'detail': 'Cart does not exist.'})
 

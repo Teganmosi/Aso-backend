@@ -1,6 +1,17 @@
 from django.contrib import admin
 from django.urls import path, include
 from apps.accounts.views import MeView
+from django.http import HttpResponseRedirect
+from django.conf import settings
+from apps.payments.views import PaymentWebhookView
+
+def order_redirect_view(request):
+    query = request.META.get('QUERY_STRING', '')
+    frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
+    target = f'{frontend_url}/orders'
+    if query:
+        target = f'{target}?{query}'
+    return HttpResponseRedirect(target)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -13,5 +24,8 @@ urlpatterns = [
     path('api/v1/payments/', include('apps.payments.urls')),
     path('api/v1/deliveries/', include('apps.deliveries.urls')),
     path('api/v1/payouts/', include('apps.payouts.urls')),
+    path('orders', order_redirect_view, name='order-redirect-bare'),
+    path('orders/', order_redirect_view, name='order-redirect'),
+    path('webhook/flow', PaymentWebhookView.as_view(), name='payment-webhook-flow-bare'),
+    path('webhook/flow/', PaymentWebhookView.as_view(), name='payment-webhook-flow'),
 ]
-

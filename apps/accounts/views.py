@@ -89,6 +89,7 @@ class LogoutView(APIView):
 class MeView(APIView):
     """
     Returns authenticated user profile details and saved shipping addresses.
+    Allows updating personal details (first_name, last_name, phone_number) via PATCH.
     """
     permission_classes = [permissions.IsAuthenticated]
 
@@ -99,6 +100,31 @@ class MeView(APIView):
             'user': UserSerializer(request.user).data,
             'addresses': AddressSerializer(addresses, many=True).data
         })
+
+    def patch(self, request):
+        from .models import User
+        user = request.user
+        data = request.data
+
+        if 'first_name' in data:
+            user.first_name = str(data['first_name']).strip()
+        if 'last_name' in data:
+            user.last_name = str(data['last_name']).strip()
+        if 'phone_number' in data:
+            phone = str(data['phone_number']).strip()
+            if phone and User.objects.filter(phone_number=phone).exclude(id=user.id).exists():
+                return Response(
+                    {'detail': 'This phone number is already registered to another account.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            user.phone_number = phone
+
+        user.save()
+        return Response({
+            'success': True,
+            'message': 'Profile updated successfully.',
+            'user': UserSerializer(user).data
+        }, status=status.HTTP_200_OK)
 
 
 class AddressViewSet(ModelViewSet):

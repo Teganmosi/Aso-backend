@@ -11,16 +11,16 @@ class IsStaffUser(permissions.BasePermission):
 
 class IsVendorOwner(permissions.BasePermission):
     """
-    Allows access only to approved vendor owners accessing their own objects.
+    Allows access to vendor owners accessing their own objects.
+    Designers can post and manage their wares, profile, and orders immediately.
     """
     def has_permission(self, request, view):
-        return (
+        return bool(
             request.user 
             and request.user.is_authenticated 
             and hasattr(request.user, 'vendor_profile')
-            and request.user.vendor_profile.status == VendorStatus.APPROVED
+            and request.user.vendor_profile.status != VendorStatus.SUSPENDED
         )
-
 
     def has_object_permission(self, request, view, obj):
         if not (request.user and request.user.is_authenticated and hasattr(request.user, 'vendor_profile')):
