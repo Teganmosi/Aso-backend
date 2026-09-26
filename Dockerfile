@@ -1,4 +1,4 @@
-﻿FROM python:3.12-slim
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -26,5 +26,5 @@ RUN chmod +x /app/docker/entrypoint.sh
 
 EXPOSE 8000
 
-ENTRYPOINT [/app/docker/entrypoint.sh]
-CMD [gunicorn, --bind, 0.0.0.0:8000, --workers, 3, --timeout, 120, config.wsgi:application]
+ENTRYPOINT ["/app/docker/entrypoint.sh"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120", "config.wsgi:application"]
