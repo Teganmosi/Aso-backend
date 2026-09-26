@@ -1,15 +1,30 @@
-﻿FROM postgres:16-alpine
+﻿FROM python:3.12-slim
 
-# Set default locale & time zone to Nigerian/Lagos
-ENV TZ=Africa/Lagos
-ENV LANG=en_US.utf8
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-# Copy custom initialization scripts for extensions and permissions
-COPY docker/01-init.sql /docker-entrypoint-initdb.d/01-init.sql
+WORKDIR /app
 
-# Expose standard PostgreSQL port
-EXPOSE 5432
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    curl \
+    netcat-traditional \
+    && rm -rf /var/lib/apt/lists/*
 
-# Health check to ensure PostgreSQL is ready to accept connections
-HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
-  CMD pg_isready -U "${POSTGRES_USER:-aso_user}" -d "${POSTGRES_DB:-aso_db}" || exit 1
+# Install python dependencies
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt gunicorn
+
+# Copy project code
+COPY . /app/
+
+# Make entrypoint executable
+RUN chmod +x /app/docker/entrypoint.sh
+
+EXPOSE 8000
+
+ENTRYPOINT [/app/docker/entrypoint.sh]
+CMD [gunicorn, --bind, 0.0.0.0:8000, --workers, 3, --timeout, 120, config.wsgi:application]

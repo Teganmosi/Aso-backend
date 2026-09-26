@@ -228,6 +228,8 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
             'approval_status',
             'rejection_reason',
             'sizes',
+            'colors',
+            'stock_quantity',
             'size_chart',
             'created_at',
             'updated_at'
