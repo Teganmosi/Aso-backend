@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # DJANGO BACKEND API (Gunicorn)
+  # ==========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aso_backend
+    restart: always
+    env_file:
+      - ./backend/.env.production
+    ports:
+      - "8000:8000"
+    volumes:
+      - aso_media_data:/app/media
+      - aso_static_data:/app/staticfiles
+    networks:
+      - aso-network
+    depends_on:
+      - postgres
+      - redis
+
+  # ==========================================
+  # REACT / VITE FRONTEND (Nginx)
+  # ==========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://69.164.247.208:8000/api/v1
+    container_name: aso_frontend
+    restart: always
+    ports:
+      - "3000:80"
+    networks:
+      - aso-network
+    depends_on:
+      - backend
+
+networks:
+  aso-network:
+    name: aso-core-infra_default
+    external: true
+
+volumes:
+  aso_media_data:
+  aso_static_data:

@@ -9,7 +9,8 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-aso-marketplace-local
 
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0,.ngrok-free.app,.ngrok-free.dev,.ngrok.io,testserver').split(',')
+_allowed_hosts_raw = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0,.ngrok-free.app,.ngrok-free.dev,.ngrok.io,testserver')
+ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_raw.split(',') if h.strip()]
 
 # Custom User Model
 AUTH_USER_MODEL = 'accounts.User'
@@ -178,6 +179,20 @@ CSRF_TRUSTED_ORIGINS = [
     'http://localhost:8080',
     'http://127.0.0.1:8080',
 ]
+
+_extra_cors = os.environ.get('CORS_ALLOWED_ORIGINS', '')
+if _extra_cors:
+    for origin in _extra_cors.split(','):
+        cleaned = origin.strip()
+        if cleaned and cleaned not in CORS_ALLOWED_ORIGINS:
+            CORS_ALLOWED_ORIGINS.append(cleaned)
+
+_extra_csrf = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+if _extra_csrf:
+    for origin in _extra_csrf.split(','):
+        cleaned = origin.strip()
+        if cleaned and cleaned not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(cleaned)
 
 # Paystack Payment Gateway Settings
 PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', '')
