@@ -1,17 +1,31 @@
 version: '3.8'
 
 services:
-  # ==========================================
-  # DJANGO BACKEND API (Gunicorn)
-  # ==========================================
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     container_name: aso_backend
     restart: always
-    env_file:
-      - ./backend/.env.production
+    environment:
+      - DEBUG=${DEBUG:-False}
+      - SECRET_KEY=${SECRET_KEY:-aso-prod-sec-key-9a8b47-2026-kvm-vps-secure-token-x91f8}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-69.164.247.208,localhost,127.0.0.1,aso_backend}
+      - DB_ENGINE=${DB_ENGINE:-django.db.backends.postgresql}
+      - DB_NAME=${DB_NAME:-aso_db}
+      - DB_USER=${DB_USER:-aso_admin}
+      - DB_PASSWORD=${DB_PASSWORD:-AsoDbPassword2026!#}
+      - DB_HOST=${DB_HOST:-aso_postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_SSLMODE=${DB_SSLMODE:-}
+      - REDIS_URL=${REDIS_URL:-redis://:AsoRedisPass2026!%23@aso_redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://:AsoRedisPass2026!%23@aso_redis:6379/0}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://69.164.247.208,http://69.164.247.208:3000,http://69.164.247.208:8000,http://localhost:3000}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-http://69.164.247.208,http://69.164.247.208:3000,http://69.164.247.208:8000,http://localhost:3000}
+      - FRONTEND_URL=${FRONTEND_URL:-http://69.164.247.208:3000}
+      - PAYSTACK_SECRET_KEY=${PAYSTACK_SECRET_KEY:-sk_test_mock_paystack_secret_key}
+      - PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY:-pk_test_mock_paystack_public_key}
+      - ASO_STORAGE_PUBLIC_BASE=${ASO_STORAGE_PUBLIC_BASE:-https://cdn.aso.ng}
     ports:
       - "8000:8000"
     volumes:
@@ -19,27 +33,6 @@ services:
       - aso_static_data:/app/staticfiles
     networks:
       - aso-network
-    depends_on:
-      - postgres
-      - redis
-
-  # ==========================================
-  # REACT / VITE FRONTEND (Nginx)
-  # ==========================================
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: http://69.164.247.208:8000/api/v1
-    container_name: aso_frontend
-    restart: always
-    ports:
-      - "3000:80"
-    networks:
-      - aso-network
-    depends_on:
-      - backend
 
 networks:
   aso-network:
