@@ -279,3 +279,15 @@ LOGGING = {
 
 
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
+
+
+# Redis 7 Cache Configuration
+REDIS_URL = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0')
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': REDIS_URL,
+        'TIMEOUT': 300,  # 5 minutes default
+        'KEY_PREFIX': 'aso_marketplace',
+    }
+}

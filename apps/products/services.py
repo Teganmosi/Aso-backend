@@ -1,3 +1,4 @@
+from django.core.cache import cache
 from decimal import Decimal
 from django.conf import settings
 from django.db import transaction
@@ -333,3 +334,10 @@ def create_verified_review(customer, product: Product, order_item_id, rating: in
     return review
 
 
+
+
+def invalidate_product_caches():
+    try:
+        cache.clear()
+    except Exception:
+        pass
