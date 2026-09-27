@@ -12,6 +12,9 @@ fi
 echo "Applying database migrations..."
 python manage.py migrate --noinput
 
+echo "Seeding/updating marketplace categories..."
+python manage.py seed_categories || true
+
 echo "Collecting static files..."
 python manage.py collectstatic --noinput || true
 
