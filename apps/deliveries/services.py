@@ -34,10 +34,11 @@ def create_delivery_for_order(order, carrier_name: str = 'DELLYMAN', dispatch_no
     # Extract vendor studio address
     vendor = order.vendor
     pickup_name = vendor.store_name
-    pickup_phone = getattr(vendor, 'phone_number', None) or getattr(vendor.user, 'phone_number', '08000000000')
-    pickup_address = getattr(vendor, 'address', None) or f"{getattr(vendor, 'city', 'Ikeja')}, Lagos, Nigeria"
-    if not ('lagos' in pickup_address.lower() or 'nigeria' in pickup_address.lower()):
-        pickup_address += ", Lagos, Nigeria"
+    pickup_phone = getattr(vendor.user, 'phone_number', '08000000000')
+    pickup_address = getattr(vendor, 'workshop_address', None) or f"{getattr(vendor, 'city', 'Ikeja')}, {getattr(vendor, 'state', 'Lagos')}, Nigeria"
+    if not ('nigeria' in pickup_address.lower()):
+        pickup_address += ", Nigeria"
+    pickup_landmark = getattr(vendor, 'landmark', None) or 'N/A'
 
     # Extract destination customer address
     ship_snap = order.shipping_address_snapshot or {}
@@ -47,6 +48,7 @@ def create_delivery_for_order(order, carrier_name: str = 'DELLYMAN', dispatch_no
     city = ship_snap.get('city', 'Lagos')
     state = ship_snap.get('state', 'Lagos')
     dest_address = f"{street}, {city}, {state}, Nigeria".strip(', ')
+    dest_landmark = ship_snap.get('landmark', '') or 'N/A'
 
     # Extract garment description
     first_item = order.items.first()
@@ -69,7 +71,9 @@ def create_delivery_for_order(order, carrier_name: str = 'DELLYMAN', dispatch_no
             delivery_phone=dest_phone,
             delivery_address=dest_address,
             package_desc=pkg_desc,
-            weight_kg=2.0
+            weight_kg=2.0,
+            pickup_landmark=pickup_landmark,
+            delivery_landmark=dest_landmark
         )
         dellyman_order_id = str(booking_res.get('OrderID') or '')
         dellyman_order_code = str(booking_res.get('OrderCode') or '')

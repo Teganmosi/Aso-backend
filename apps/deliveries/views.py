@@ -109,33 +109,73 @@ class DeliveryQuoteView(APIView):
         except Address.DoesNotExist:
             return Response({'detail': 'Address not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Default studio address in Lagos
+        # Default studio address in Lagos if vendor workshop address not set
         pickup_addr = "12 Admiralty Way, Lekki Phase 1, Lagos, Nigeria"
+        vendor_city = "Ikeja"
+        vendor_state = "Lagos"
         if vendor_id:
             try:
                 vendor = VendorProfile.objects.get(id=vendor_id)
-                if hasattr(vendor, 'address') and vendor.address:
-                    pickup_addr = f"{vendor.address}, Lagos, Nigeria"
+                if vendor.workshop_address:
+                    pickup_addr = f"{vendor.workshop_address}, {vendor.city or 'Lagos'}, {vendor.state or 'Lagos'}, Nigeria"
+                if vendor.city:
+                    vendor_city = vendor.city
+                if vendor.state:
+                    vendor_state = vendor.state
             except VendorProfile.DoesNotExist:
                 pass
 
         dest_addr_str = f"{dest_address.street_address}, {dest_address.city}, {dest_address.state}, Nigeria"
+        if dest_address.landmark:
+            dest_addr_str = f"{dest_address.street_address} (Near {dest_address.landmark}), {dest_address.city}, {dest_address.state}, Nigeria"
 
         # Check if intra-state or interstate
         dest_state = (dest_address.state or 'Lagos').strip()
-        is_interstate = dest_state.lower() != 'lagos'
+        is_interstate = dest_state.lower() != vendor_state.lower()
+
+        # If Dellyman API key is not configured, do NOT show a fake price (e.g. 1850).
+        if not dellyman_client.api_key:
+            return Response({
+                'success': True,
+                'has_live_quote': False,
+                'delivery_fee_naira': None,
+                'delivery_fee_kobo': 0,
+                'eta': "Interstate Delivery (2-3 Days)" if is_interstate else "Same-Day / Next-Day Delivery",
+                'carrier': "Dellyman Logistics",
+                'message': "Live rate pending API configuration. Courier fee confirmed at dispatch."
+            }, status=status.HTTP_200_OK)
 
         try:
             if is_interstate:
                 quote_res = dellyman_client.get_interstate_quote(
-                    pickup_state="Lagos",
-                    pickup_city="Ikeja",
+                    pickup_state=vendor_state,
+                    pickup_city=vendor_city,
                     pickup_address=pickup_addr,
                     delivery_state=dest_state,
                     delivery_city=dest_address.city or dest_state,
                     delivery_address=dest_addr_str
                 )
-                fare = float(quote_res.get('TotalPrice') or quote_res.get('PayableAmount') or 5000)
+                fare_val = quote_res.get('TotalPrice') or quote_res.get('PayableAmount')
+                if fare_val and float(fare_val) > 0:
+                    fare = float(fare_val)
+                    return Response({
+                        'success': True,
+                        'has_live_quote': True,
+                        'delivery_fee_naira': fare,
+                        'delivery_fee_kobo': int(fare * 100),
+                        'eta': "Interstate Delivery (2-3 Days)",
+                        'carrier': quote_res.get('Name') or "Dellyman Interstate Express"
+                    }, status=status.HTTP_200_OK)
+                else:
+                    return Response({
+                        'success': True,
+                        'has_live_quote': False,
+                        'delivery_fee_naira': None,
+                        'delivery_fee_kobo': 0,
+                        'eta': "Interstate Delivery (2-3 Days)",
+                        'carrier': "Dellyman Interstate Express",
+                        'message': "Interstate courier quote will be calculated upon dispatch."
+                    }, status=status.HTTP_200_OK)
             else:
                 quote_res = dellyman_client.get_quotes(
                     pickup_address=pickup_addr,
@@ -143,26 +183,38 @@ class DeliveryQuoteView(APIView):
                 )
                 companies = quote_res.get('Companies', [])
                 if companies:
-                    fare = float(companies[0].get('TotalPrice') or companies[0].get('PayableAmount') or 1800)
-                else:
-                    fare = 1800.0
+                    fare_val = companies[0].get('TotalPrice') or companies[0].get('PayableAmount')
+                    if fare_val and float(fare_val) > 0:
+                        fare = float(fare_val)
+                        return Response({
+                            'success': True,
+                            'has_live_quote': True,
+                            'delivery_fee_naira': fare,
+                            'delivery_fee_kobo': int(fare * 100),
+                            'eta': "Same-Day / Next-Day Delivery",
+                            'carrier': companies[0].get('Name') or "Dellyman Logistics"
+                        }, status=status.HTTP_200_OK)
 
-            return Response({
-                'success': True,
-                'delivery_fee_naira': fare,
-                'delivery_fee_kobo': int(fare * 100),
-                'eta': "Interstate Delivery (2-3 Days)" if is_interstate else "Same-Day / Next-Day Delivery",
-                'carrier': "Dellyman Logistics"
-            }, status=status.HTTP_200_OK)
+                return Response({
+                    'success': True,
+                    'has_live_quote': False,
+                    'delivery_fee_naira': None,
+                    'delivery_fee_kobo': 0,
+                    'eta': "Same-Day / Next-Day Delivery",
+                    'carrier': "Dellyman Logistics",
+                    'message': "Courier quote will be calculated upon dispatch."
+                }, status=status.HTTP_200_OK)
 
         except Exception as e:
             logger.error(f"Quote calculation error: {e}")
             return Response({
                 'success': True,
-                'delivery_fee_naira': 2500.0,
-                'delivery_fee_kobo': 250000,
+                'has_live_quote': False,
+                'delivery_fee_naira': None,
+                'delivery_fee_kobo': 0,
                 'eta': "Standard Courier Delivery",
-                'carrier': "Aso Logistics Partner"
+                'carrier': "Dellyman Logistics",
+                'message': "Delivery fee will be calculated upon dispatch."
             }, status=status.HTTP_200_OK)
 
 

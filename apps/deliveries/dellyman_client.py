@@ -90,41 +90,25 @@ class DellymanClient:
             "DeliveryAddress": [delivery_address]
         }
 
-        # If API key is not configured or in sandbox testing, return intelligent simulated quote
+        # If API key is not configured, do not return a fake tariff (e.g. 1850)
         if not self.api_key:
-            logger.info("Dellyman API key not set, using sandbox estimated quote.")
+            logger.info("Dellyman API key not configured; live quote unavailable.")
             return {
-                "ResponseCode": 100,
-                "ResponseMessage": "Success (Sandbox Estimation)",
-                "Companies": [
-                    {
-                        "CompanyID": int(self.company_id),
-                        "Name": "Delly Logistics Africa Ltd",
-                        "TotalPrice": 1850,
-                        "PayableAmount": 1850,
-                        "SameDayPrice": 1850
-                    }
-                ],
-                "Distance": 14,
-                "Estimated": True
+                "ResponseCode": 401,
+                "ResponseMessage": "Dellyman API key not configured.",
+                "Companies": [],
+                "Estimated": False
             }
 
         try:
             return self._post("GetQuotes", payload)
         except Exception as e:
-            logger.warning(f"Live GetQuotes failed, falling back to simulated tariff: {e}")
+            logger.warning(f"Live GetQuotes failed: {e}")
             return {
-                "ResponseCode": 100,
-                "ResponseMessage": "Simulated Tariff",
-                "Companies": [
-                    {
-                        "CompanyID": int(self.company_id),
-                        "Name": "Delly Logistics Africa Ltd",
-                        "TotalPrice": 2000,
-                        "PayableAmount": 2000
-                    }
-                ],
-                "Estimated": True
+                "ResponseCode": 500,
+                "ResponseMessage": f"Live quote unavailable: {e}",
+                "Companies": [],
+                "Estimated": False
             }
 
     def get_interstate_quote(
@@ -153,26 +137,21 @@ class DellymanClient:
         }
 
         if not self.api_key:
+            logger.info("Dellyman API key not configured; interstate quote unavailable.")
             return {
-                "ResponseCode": 100,
-                "ResponseMessage": "Success (Sandbox Interstate)",
-                "Name": "Dellyman Interstate Express",
-                "CompanyID": int(self.company_id),
-                "TotalPrice": 5500,
-                "PayableAmount": 5500,
-                "Estimated": True
+                "ResponseCode": 401,
+                "ResponseMessage": "Dellyman API key not configured.",
+                "Estimated": False
             }
 
         try:
             return self._post("GetInterstateQuote", payload)
         except Exception as e:
-            logger.warning(f"Interstate quote error, returning fallback: {e}")
+            logger.warning(f"Interstate quote error: {e}")
             return {
-                "ResponseCode": 100,
-                "ResponseMessage": "Fallback Interstate",
-                "TotalPrice": 5500,
-                "PayableAmount": 5500,
-                "Estimated": True
+                "ResponseCode": 500,
+                "ResponseMessage": f"Interstate quote unavailable: {e}",
+                "Estimated": False
             }
 
     # =========================================================================
@@ -189,7 +168,9 @@ class DellymanClient:
         delivery_address: str,
         package_desc: str,
         weight_kg: float = 2.0,
-        timeline: str = "sameDay"
+        timeline: str = "sameDay",
+        pickup_landmark: str = "N/A",
+        delivery_landmark: str = "N/A"
     ) -> dict:
         """
         Calls /BookOrder to summon a courier/rider upon order completion.
@@ -204,7 +185,7 @@ class DellymanClient:
             "PickUpContactName": pickup_name,
             "PickUpContactNumber": pickup_phone,
             "PickUpGooglePlaceAddress": pickup_address,
-            "PickUpLandmark": "N/A",
+            "PickUpLandmark": pickup_landmark or "N/A",
             "IsProductOrder": 0,
             "IsInstantDelivery": 0,
             "PickUpRequestedDate": today_str,
@@ -218,7 +199,7 @@ class DellymanClient:
                     "DeliveryContactNumber": delivery_phone,
                     "PackageWeight": weight_kg,
                     "DeliveryGooglePlaceAddress": delivery_address,
-                    "DeliveryLandmark": "N/A",
+                    "DeliveryLandmark": delivery_landmark or "N/A",
                     "ProductAmount": 0
                 }
             ]
