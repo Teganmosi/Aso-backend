@@ -10,7 +10,7 @@ services:
     environment:
       - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY:-aso-prod-sec-key-9a8b47-2026-kvm-vps-secure-token-x91f8}
-      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-69.164.247.208,localhost,127.0.0.1,aso_backend}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-asomarketplace.com.ng,www.asomarketplace.com.ng,api.asomarketplace.com.ng,app-69-164-247-208.sslip.io,api-69-164-247-208.sslip.io,69.164.247.208,localhost,127.0.0.1,aso_backend}
       - DB_ENGINE=${DB_ENGINE:-django.db.backends.postgresql}
       - DB_NAME=${DB_NAME:-aso_db}
       - DB_USER=${DB_USER:-aso_admin}
@@ -20,9 +20,9 @@ services:
       - DB_SSLMODE=${DB_SSLMODE:-}
       - REDIS_URL=${REDIS_URL:-redis://:AsoRedisPass2026!%23@aso_redis:6379/0}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://:AsoRedisPass2026!%23@aso_redis:6379/0}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://69.164.247.208,http://69.164.247.208:3000,http://69.164.247.208:8000,http://localhost:3000}
-      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-http://69.164.247.208,http://69.164.247.208:3000,http://69.164.247.208:8000,http://localhost:3000}
-      - FRONTEND_URL=${FRONTEND_URL:-http://69.164.247.208:3000}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://asomarketplace.com.ng,https://www.asomarketplace.com.ng,https://api.asomarketplace.com.ng,https://app-69-164-247-208.sslip.io,http://69.164.247.208:3000,http://localhost:5173,http://localhost:3000}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-https://asomarketplace.com.ng,https://www.asomarketplace.com.ng,https://api.asomarketplace.com.ng,https://app-69-164-247-208.sslip.io,https://api-69-164-247-208.sslip.io,http://69.164.247.208:3000,http://localhost:5173,http://localhost:3000}
+      - FRONTEND_URL=${FRONTEND_URL:-https://asomarketplace.com.ng}
       - PAYSTACK_SECRET_KEY=${PAYSTACK_SECRET_KEY:-sk_test_mock_paystack_secret_key}
       - PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY:-pk_test_mock_paystack_public_key}
       - ASO_STORAGE_PUBLIC_BASE=${ASO_STORAGE_PUBLIC_BASE:-https://cdn.aso.ng}
