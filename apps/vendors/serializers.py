@@ -26,12 +26,14 @@ class PublicVendorProfileSerializer(serializers.ModelSerializer):
     categories = serializers.SerializerMethodField()
     whatsapp_phone = serializers.SerializerMethodField()
     lead_designer_name = serializers.SerializerMethodField()
+    has_started_verification = serializers.SerializerMethodField()
 
     class Meta:
         model = VendorProfile
         fields = [
             'id', 'store_name', 'slug', 'description', 'logo_url',
             'banner_url', 'city', 'state', 'status', 'is_verified',
+            'has_started_verification',
             'instagram_handle', 'whatsapp_phone', 'lead_designer_name',
             'average_rating', 'review_count', 'product_count',
             'starting_price_naira', 'preview_images', 'categories',
@@ -61,8 +63,11 @@ class PublicVendorProfileSerializer(serializers.ModelSerializer):
         cats = obj.products.filter(status='PUBLISHED', is_active=True).values_list('category__name', flat=True)
         return sorted(list(set(cats)))
 
-    def get_whatsapp_phone(self, obj) -> str:
-        return getattr(obj.user, 'phone_number', '') or ''
+    def get_has_started_verification(self, obj) -> bool:
+        return bool(obj.nin_number or obj.cac_number or (obj.kyc_tier and obj.kyc_tier != 'TIER_1_STARTER'))
+
+    def get_whatsapp_phone(self, obj) -> str | None:
+        return None
 
     def get_lead_designer_name(self, obj) -> str:
         if obj.user:
