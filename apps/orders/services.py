@@ -228,7 +228,7 @@ def mark_ready_for_pickup(order: Order, user) -> Order:
 
         # Trigger Delivery record creation
         from apps.deliveries.services import create_delivery_for_order
-        create_delivery_for_order(order, carrier_name='MANUAL_DISPATCH', dispatch_notes='')
+        create_delivery_for_order(order, carrier_name='DELLYMAN', dispatch_notes='Automated Dellyman dispatch')
 
     return order
 

@@ -291,3 +291,9 @@ CACHES = {
         'KEY_PREFIX': 'aso_marketplace',
     }
 }
+
+# Dellyman Logistics Configuration
+DELLYMAN_BASE_URL = os.environ.get('DELLYMAN_BASE_URL', 'https://dev.dellyman.com/api/v3.0/')
+DELLYMAN_API_KEY = os.environ.get('DELLYMAN_API_KEY', '')
+DELLYMAN_WEBHOOK_SECRET = os.environ.get('DELLYMAN_WEBHOOK_SECRET', '')
+DELLYMAN_COMPANY_ID = os.environ.get('DELLYMAN_COMPANY_ID', '643')
