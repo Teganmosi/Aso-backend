@@ -126,3 +126,54 @@ class OrderItem(UUIDModel):
     @property
     def total_price_naira(self) -> float:
         return round(self.total_price_kobo / 100.0, 2)
+
+
+class MessageType(models.TextChoices):
+    TEXT = 'TEXT', 'Text'
+    ACTION_REQUEST = 'ACTION_REQUEST', 'Action Request'
+    ACTION_RESOLVED = 'ACTION_RESOLVED', 'Action Resolved'
+    SYSTEM_AUDIT = 'SYSTEM_AUDIT', 'System Audit'
+
+
+class OrderMessage(UUIDModel):
+    """
+    In-app order workspace communication between customer and designer
+    governed by Aso Escrow protection and anti-bypass security filters.
+    """
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name='messages',
+        db_index=True
+    )
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='sent_order_messages'
+    )
+    message_type = models.CharField(
+        max_length=30,
+        choices=MessageType.choices,
+        default=MessageType.TEXT,
+        db_index=True
+    )
+    content = models.TextField(help_text="Sanitized public message text displayed in chat")
+    original_content = models.TextField(help_text="Unredacted original text for Trust & Safety audits")
+    is_masked = models.BooleanField(default=False, db_index=True, help_text="True if anti-bypass shield intervened")
+    mask_reason = models.CharField(max_length=100, null=True, blank=True)
+    mask_tier = models.CharField(max_length=20, null=True, blank=True, help_text="HEURISTIC or LLM_NEMOTRON")
+    
+    # 1-Tap Tailor Actions
+    action_type = models.CharField(max_length=50, null=True, blank=True, help_text="e.g. RECHECK_MEASUREMENT")
+    action_payload = models.JSONField(null=True, blank=True, default=dict)
+    
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'orders_ordermessage'
+        verbose_name = 'Order Message'
+        verbose_name_plural = 'Order Messages'
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Message by {self.sender.email} on Order #{self.order.order_number} ({self.message_type})"

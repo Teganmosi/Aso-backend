@@ -1,5 +1,14 @@
 from django.urls import path
-from apps.orders.views import OrderListCreateView, OrderDetailView, OrderAcceptView, OrderPreparingView, OrderReadyView
+from apps.orders.views import (
+    OrderListCreateView, 
+    OrderDetailView, 
+    OrderAcceptView, 
+    OrderPreparingView, 
+    OrderReadyView,
+    OrderMessageListCreateView,
+    OrderActionRequestView,
+    OrderActionResolveView
+)
 from apps.deliveries.views import OrderDeliveryDetailView
 
 urlpatterns = [
@@ -9,4 +18,7 @@ urlpatterns = [
     path('<uuid:order_id>/preparing/', OrderPreparingView.as_view(), name='order-preparing'),
     path('<uuid:order_id>/ready/', OrderReadyView.as_view(), name='order-ready'),
     path('<uuid:order_id>/delivery/', OrderDeliveryDetailView.as_view(), name='order-delivery-detail'),
+    path('<uuid:order_id>/messages/', OrderMessageListCreateView.as_view(), name='order-messages-list-create'),
+    path('<uuid:order_id>/messages/action-request/', OrderActionRequestView.as_view(), name='order-action-request'),
+    path('<uuid:order_id>/messages/action-resolve/', OrderActionResolveView.as_view(), name='order-action-resolve'),
 ]

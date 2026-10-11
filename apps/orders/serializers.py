@@ -141,3 +141,63 @@ class VendorOrderSerializer(serializers.ModelSerializer):
             from apps.deliveries.serializers import DeliverySerializer
             return DeliverySerializer(delivery).data
         return None
+
+
+from apps.orders.models import OrderMessage
+
+class OrderMessageSerializer(serializers.ModelSerializer):
+    """
+    Serializer for order workspace messages including sender role and 1-tap tailor actions.
+    """
+    sender_email = serializers.EmailField(source='sender.email', read_only=True)
+    sender_name = serializers.SerializerMethodField()
+    sender_role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrderMessage
+        fields = [
+            'id',
+            'order_id',
+            'sender_id',
+            'sender_email',
+            'sender_name',
+            'sender_role',
+            'message_type',
+            'content',
+            'is_masked',
+            'mask_reason',
+            'mask_tier',
+            'action_type',
+            'action_payload',
+            'read_at',
+            'created_at'
+        ]
+
+    def get_sender_name(self, obj) -> str:
+        if hasattr(obj.sender, 'vendor_profile') and obj.sender.vendor_profile:
+            return obj.sender.vendor_profile.store_name
+        name = f"{obj.sender.first_name} {obj.sender.last_name}".strip()
+        return name if name else obj.sender.email.split('@')[0]
+
+    def get_sender_role(self, obj) -> str:
+        if hasattr(obj.order, 'vendor') and obj.order.vendor.user_id == obj.sender_id:
+            return 'VENDOR'
+        if obj.order.customer_id == obj.sender_id:
+            return 'CUSTOMER'
+        return 'SUPPORT'
+
+
+class OrderMessageCreateSerializer(serializers.Serializer):
+    content = serializers.CharField(required=True, min_length=1, max_length=2000)
+
+
+class OrderActionRequestSerializer(serializers.Serializer):
+    measurement_key = serializers.CharField(required=True, max_length=50)
+    label = serializers.CharField(required=True, max_length=100)
+    prompt = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
+
+class OrderActionResolveSerializer(serializers.Serializer):
+    message_id = serializers.UUIDField(required=True)
+    measurement_key = serializers.CharField(required=True, max_length=50)
+    new_value = serializers.CharField(required=True, max_length=50)

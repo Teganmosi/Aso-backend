@@ -119,3 +119,36 @@ class OrderItemAdmin(admin.ModelAdmin):
         'created_at',
         'updated_at'
     ]
+
+from apps.orders.models import OrderMessage
+
+@admin.register(OrderMessage)
+class OrderMessageAdmin(admin.ModelAdmin):
+    list_display = [
+        'id',
+        'order',
+        'sender',
+        'message_type',
+        'is_masked',
+        'mask_tier',
+        'mask_reason',
+        'created_at'
+    ]
+    list_filter = ['is_masked', 'mask_tier', 'message_type', 'created_at']
+    search_fields = ['order__order_number', 'sender__email', 'content', 'original_content']
+    readonly_fields = [
+        'id',
+        'order',
+        'sender',
+        'message_type',
+        'content',
+        'original_content',
+        'is_masked',
+        'mask_reason',
+        'mask_tier',
+        'action_type',
+        'action_payload',
+        'read_at',
+        'created_at',
+        'updated_at'
+    ]
