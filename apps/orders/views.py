@@ -193,6 +193,15 @@ class OrderMessageListCreateView(APIView):
         if not (is_customer or is_vendor or user.is_staff):
             return None, Response({'success': False, 'message': 'Access forbidden.'}, status=status.HTTP_403_FORBIDDEN)
 
+        # ESCROW LOCK: Pending payment orders cannot access chat workspace
+        from apps.orders.models import OrderStatus
+        if order.order_status == OrderStatus.PENDING_PAYMENT and not user.is_staff:
+            return None, Response({
+                'success': False,
+                'code': 'PAYMENT_REQUIRED',
+                'message': 'Order workspace messaging is only accessible after payment has been verified in escrow.'
+            }, status=status.HTTP_403_FORBIDDEN)
+
         return order, None
 
     def get(self, request, order_id):
@@ -260,6 +269,14 @@ class OrderActionRequestView(APIView):
         if not (is_vendor or request.user.is_staff):
             return Response({'success': False, 'message': 'Only the assigned designer can dispatch action requests.'}, status=status.HTTP_403_FORBIDDEN)
 
+        from apps.orders.models import OrderStatus
+        if order.order_status == OrderStatus.PENDING_PAYMENT and not request.user.is_staff:
+            return Response({
+                'success': False,
+                'code': 'PAYMENT_REQUIRED',
+                'message': 'Action requests are only available for paid escrow orders.'
+            }, status=status.HTTP_403_FORBIDDEN)
+
         serializer = OrderActionRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -312,6 +329,14 @@ class OrderActionResolveView(APIView):
 
         if order.customer_id != request.user.id and not request.user.is_staff:
             return Response({'success': False, 'message': 'Only the customer can update order measurements.'}, status=status.HTTP_403_FORBIDDEN)
+
+        from apps.orders.models import OrderStatus
+        if order.order_status == OrderStatus.PENDING_PAYMENT and not request.user.is_staff:
+            return Response({
+                'success': False,
+                'code': 'PAYMENT_REQUIRED',
+                'message': 'Measurement resolution is only accessible after payment has been verified in escrow.'
+            }, status=status.HTTP_403_FORBIDDEN)
 
         serializer = OrderActionResolveSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
