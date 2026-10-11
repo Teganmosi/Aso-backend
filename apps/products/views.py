@@ -432,3 +432,102 @@ class VendorReviewListView(APIView):
             'reviews': serializer.data
         }, status=status.HTTP_200_OK)
 
+
+
+from .fit_serializers import FitEstimateRequestSerializer, FitFeedbackSerializer
+from .fit_intelligence import calculate_fit_estimate
+from .models import FitEstimate, FitFeedback
+
+
+class FitEstimateView(APIView):
+    """
+    PRD v2.0: POST /api/v1/fit/estimate/
+    Intelligent Fit Estimation endpoint combining 3FAM, Garment Rules, NLP, and Confidence Scoring.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = FitEstimateRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        user = request.user if request.user.is_authenticated else None
+        
+        result = calculate_fit_estimate(
+            category=data.get('category', 'tops_senator'),
+            rtw_size=data.get('rtw_size', 'M'),
+            height_inches=data.get('height_inches', 70.0),
+            build=data.get('build', 'regular'),
+            usual_size_fit=data.get('usual_size_fit', 'fitted'),
+            garment_fit=data.get('garment_fit', 'regular'),
+            style=data.get('style', 'standard'),
+            known_measurements=data.get('known_measurements', {}),
+            text_description=data.get('text_description', ''),
+            customer=user
+        )
+
+        try:
+            FitEstimate.objects.create(
+                customer=user,
+                garment_category=data.get('category', 'tops_senator'),
+                estimator_version='2.0',
+                input_profile=result['input_profile'],
+                body_measurements=result['body_measurements'],
+                garment_measurements=result['garment_measurements'],
+                confidence_data={
+                    'score': result['confidence_score'],
+                    'tier': result['confidence_tier'],
+                    'details': result['confidences']
+                },
+                source_data=result['sources']
+            )
+        except Exception:
+            pass
+
+        return Response({
+            'success': True,
+            'data': result
+        }, status=status.HTTP_200_OK)
+
+
+class FitFeedbackView(APIView):
+    """
+    PRD v2.0: POST /api/v1/fit/feedback/
+    Tailor/Customer feedback collection endpoint.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = FitFeedbackSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+
+        user = request.user if request.user.is_authenticated else None
+        
+        deltas = {}
+        est = d.get('estimated_measurements', {})
+        final = d.get('final_measurements', {})
+        for k, v in final.items():
+            if k in est:
+                try:
+                    deltas[f"{k}_delta"] = round(float(v) - float(est[k]), 2)
+                except:
+                    pass
+
+        feedback = FitFeedback.objects.create(
+            fit_estimate_id=d.get('fit_estimate_id'),
+            order_item_id=d.get('order_item_id'),
+            customer=user,
+            estimated_measurements=est,
+            final_measurements=final,
+            measurement_deltas=deltas,
+            tailor_feedback=d.get('tailor_feedback', 'PERFECT'),
+            notes=d.get('notes', '')
+        )
+
+        return Response({
+            'success': True,
+            'message': 'Fit feedback recorded successfully.',
+            'id': str(feedback.id),
+            'deltas': deltas
+        }, status=status.HTTP_201_CREATED)

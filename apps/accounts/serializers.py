@@ -10,9 +10,16 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'email', 'first_name', 'last_name', 'phone_number',
-            'is_staff', 'is_vendor', 'vendor_profile', 'created_at', 'date_joined'
+            'is_staff', 'is_vendor', 'vendor_profile', 'saved_measurements', 'created_at', 'date_joined'
         ]
         read_only_fields = ['id', 'email', 'is_staff', 'created_at', 'date_joined']
+
+    saved_measurements = serializers.SerializerMethodField()
+
+    def get_saved_measurements(self, obj) -> dict:
+        if hasattr(obj, 'customer_profile') and obj.customer_profile.saved_measurements:
+            return obj.customer_profile.saved_measurements
+        return {}
 
     def get_is_vendor(self, obj) -> bool:
         return hasattr(obj, 'vendor_profile') and obj.vendor_profile.status == 'APPROVED'

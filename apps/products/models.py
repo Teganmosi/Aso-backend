@@ -276,3 +276,94 @@ class Review(UUIDModel):
         return f"{self.rating}★ Review by {self.customer.email} on {self.product.title}"
 
 
+
+
+class FitEstimate(UUIDModel):
+    """
+    PRD v2.0: Versioned log of fit estimation calculations and confidence metrics.
+    """
+    customer = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fit_estimates'
+    )
+    garment_category = models.CharField(max_length=50, default='full_set')
+    estimator_version = models.CharField(max_length=20, default='2.0')
+    input_profile = models.JSONField(
+        default=dict,
+        help_text="Structured inputs (RTW size, height, build, usual fit, garment fit, raw description)"
+    )
+    body_measurements = models.JSONField(
+        default=dict,
+        help_text="Estimated net body measurements without garment ease"
+    )
+    garment_measurements = models.JSONField(
+        default=dict,
+        help_text="Estimated cut garment measurements with ease applied"
+    )
+    confidence_data = models.JSONField(
+        default=dict,
+        help_text="Per-attribute and overall confidence scoring"
+    )
+    source_data = models.JSONField(
+        default=dict,
+        help_text="Source attribution for each measurement (user, historical, deterministic, llm)"
+    )
+
+    class Meta:
+        db_table = 'products_fitestimate'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        user_str = self.customer.email if self.customer else "Anonymous"
+        return f"FitEstimate v{self.estimator_version} ({self.garment_category}) for {user_str}"
+
+
+class FitFeedback(UUIDModel):
+    """
+    PRD v2.0: Ground-truth feedback loop capturing tailor alterations and final measurements.
+    """
+    fit_estimate = models.ForeignKey(
+        FitEstimate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='feedbacks'
+    )
+    order_item = models.ForeignKey(
+        'orders.OrderItem',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fit_feedbacks'
+    )
+    customer = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fit_feedbacks'
+    )
+    estimated_measurements = models.JSONField(default=dict)
+    final_measurements = models.JSONField(default=dict)
+    measurement_deltas = models.JSONField(default=dict)
+    tailor_feedback = models.CharField(
+        max_length=30,
+        choices=[
+            ('PERFECT', 'Perfect Fit — Zero Alteration'),
+            ('TOO_TIGHT', 'Slightly Too Tight'),
+            ('TOO_LOOSE', 'Slightly Too Loose'),
+            ('ALTERED', 'Required Substantial Alteration')
+        ],
+        default='PERFECT'
+    )
+    notes = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'products_fitfeedback'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"FitFeedback on {self.order_item or 'Estimate'} ({self.tailor_feedback})"

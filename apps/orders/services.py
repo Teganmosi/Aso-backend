@@ -104,7 +104,8 @@ def create_order_from_cart(user, address) -> Order:
                 sku_snapshot=variant.sku,
                 unit_price_kobo=item.unit_price_kobo,
                 quantity=item.quantity,
-                total_price_kobo=item.total_price_kobo
+                total_price_kobo=item.total_price_kobo,
+                custom_measurements=getattr(item, 'custom_measurements', {}) or {}
             ))
         OrderItem.objects.bulk_create(order_items)
 

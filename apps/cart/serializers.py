@@ -37,6 +37,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             'unit_price_kobo',
             'unit_price_naira',
             'quantity',
+            'custom_measurements',
             'total_price_kobo',
             'total_price_naira',
             'primary_image_url',
@@ -87,6 +88,7 @@ class AddCartItemSerializer(serializers.Serializer):
     """
     variant_id = serializers.UUIDField(required=True)
     quantity = serializers.IntegerField(default=1, min_value=1)
+    custom_measurements = serializers.DictField(required=False, default=dict)
 
     def validate_variant_id(self, value):
         try:

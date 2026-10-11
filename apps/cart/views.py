@@ -71,6 +71,7 @@ class CartItemAddView(APIView):
 
         variant = serializer.validated_data['variant']
         requested_qty = serializer.validated_data['quantity']
+        custom_measurements = serializer.validated_data.get('custom_measurements') or {}
         variant_vendor = variant.product.vendor
 
         with transaction.atomic():
@@ -82,7 +83,7 @@ class CartItemAddView(APIView):
                     'detail': f"Your cart already contains items from {cart.vendor.store_name}. Checkout or clear cart before adding items from another designer."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            existing_item = cart.items.filter(variant=variant).first()
+            existing_item = cart.items.filter(variant=variant, custom_measurements=custom_measurements).first()
             if existing_item:
                 new_qty = existing_item.quantity + requested_qty
                 if new_qty > variant.stock_quantity:
@@ -99,7 +100,8 @@ class CartItemAddView(APIView):
                 CartItem.objects.create(
                     cart=cart,
                     variant=variant,
-                    quantity=requested_qty
+                    quantity=requested_qty,
+                    custom_measurements=custom_measurements
                 )
 
             if cart.vendor != variant_vendor:

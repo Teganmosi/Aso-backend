@@ -66,6 +66,7 @@ class CustomerProfile(UUIDModel):
     """
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='customer_profile')
     avatar_url = models.TextField(null=True, blank=True)
+    saved_measurements = models.JSONField(default=dict, blank=True, help_text="Customer saved My Aso Fit bespoke measurements")
 
     class Meta:
         db_table = 'accounts_customerprofile'

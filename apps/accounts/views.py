@@ -145,3 +145,40 @@ class AddressViewSet(ModelViewSet):
             'success': True,
             'address': AddressSerializer(address).data
         }, status=status.HTTP_201_CREATED)
+
+
+class UserMeasurementsView(APIView):
+    """
+    GET: Retrieve authenticated user's saved 'My Aso Fit' bespoke measurements.
+    PUT/PATCH: Update saved body measurements for 1-click checkout.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        profile, _ = CustomerProfile.objects.get_or_create(user=request.user)
+        return Response({
+            'success': True,
+            'saved_measurements': profile.saved_measurements or {}
+        })
+
+    def put(self, request):
+        return self._save_measurements(request)
+
+    def patch(self, request):
+        return self._save_measurements(request)
+
+    def _save_measurements(self, request):
+        profile, _ = CustomerProfile.objects.get_or_create(user=request.user)
+        measurements = request.data.get('measurements', request.data)
+        if not isinstance(measurements, dict):
+            return Response(
+                {'detail': 'Measurements must be a JSON object.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        profile.saved_measurements = measurements
+        profile.save(update_fields=['saved_measurements', 'updated_at'])
+        return Response({
+            'success': True,
+            'message': 'My Aso Fit measurements saved successfully.',
+            'saved_measurements': profile.saved_measurements
+        }, status=status.HTTP_200_OK)

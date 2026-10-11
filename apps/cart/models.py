@@ -68,12 +68,13 @@ class CartItem(UUIDModel):
         related_name='cart_items'
     )
     quantity = models.PositiveIntegerField(default=1)
+    custom_measurements = models.JSONField(default=dict, blank=True, help_text="Bespoke tailoring measurements snapshot for this item")
 
     class Meta:
         db_table = 'cart_cartitem'
         verbose_name = 'Cart Item'
         verbose_name_plural = 'Cart Items'
-        unique_together = ('cart', 'variant')
+        # unique_together relaxed to allow distinct bespoke measurement configurations
         ordering = ['created_at']
 
     def __str__(self):

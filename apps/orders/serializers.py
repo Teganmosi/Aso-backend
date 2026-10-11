@@ -41,6 +41,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
             'unit_price_kobo',
             'unit_price_naira',
             'quantity',
+            'custom_measurements',
             'total_price_kobo',
             'total_price_naira',
             'product_image',

@@ -105,6 +105,7 @@ class OrderItem(UUIDModel):
     variant_size_snapshot = models.CharField(max_length=50)
     variant_color_snapshot = models.CharField(max_length=50, null=True, blank=True)
     sku_snapshot = models.CharField(max_length=100)
+    custom_measurements = models.JSONField(default=dict, blank=True, help_text="Immutable bespoke measurements snapshot")
     unit_price_kobo = models.PositiveBigIntegerField()
     quantity = models.PositiveIntegerField()
     total_price_kobo = models.PositiveBigIntegerField()
