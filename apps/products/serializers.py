@@ -9,7 +9,7 @@ from apps.products.models import (
     ProductStatus,
     MediaType
 )
-from apps.vendors.serializers import PublicVendorProfileSerializer
+from apps.vendors.serializers import PublicVendorProfileSerializer, CompactVendorSerializer
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -36,8 +36,13 @@ class CategorySerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'slug', 'children']
 
     def get_children(self, obj):
-        active_children = obj.children.filter(is_active=True)
-        if active_children.exists():
+        # Uses prefetched in-memory children cache if available to prevent N+1 SQL queries
+        all_children = getattr(obj, '_prefetched_objects_cache', {}).get('children')
+        if all_children is not None:
+            active_children = [c for c in all_children if c.is_active]
+        else:
+            active_children = list(obj.children.filter(is_active=True))
+        if active_children:
             return CategorySerializer(active_children, many=True).data
         return []
 
@@ -265,8 +270,9 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
 class ProductListSerializer(serializers.ModelSerializer):
     """
     Serializer for product catalog listings.
+    Optimized with CompactVendorSerializer to prevent N+1 query loops.
     """
-    vendor = PublicVendorProfileSerializer(read_only=True)
+    vendor = CompactVendorSerializer(read_only=True)
     category = CategorySimpleSerializer(read_only=True)
     base_price_naira = serializers.FloatField(read_only=True)
     primary_image_url = serializers.SerializerMethodField()
@@ -299,7 +305,7 @@ class ProductListSerializer(serializers.ModelSerializer):
     def get_size_chart(self, obj):
         if obj.size_chart and isinstance(obj.size_chart, dict) and obj.size_chart.get('body_measurements'):
             return obj.size_chart
-        return generate_default_size_chart(obj)
+        return None
 
     def get_primary_image_url(self, obj):
         media_items = list(obj.media.all())  # uses prefetch cache

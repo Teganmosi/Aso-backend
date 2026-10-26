@@ -45,17 +45,25 @@ class CategoryListView(APIView):
     """
     Public category list endpoint returning categories.
     If parent_only=true, returns only root collections; otherwise returns all active categories.
+    Optimized with 1-hour Redis caching.
     """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
         parent_only_param = request.query_params.get('parent_only', 'false').lower() == 'true'
+        cache_key = f"aso_category_list_v2_{parent_only_param}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         categories = get_active_categories(parent_only=parent_only_param)
         serializer = CategorySerializer(categories, many=True)
-        return Response({
+        response_data = {
             'success': True,
             'categories': serializer.data
-        })
+        }
+        cache.set(cache_key, response_data, timeout=3600)  # 1 hour
+        return Response(response_data)
 
 
 class CategoryDetailView(APIView):
@@ -96,6 +104,15 @@ class PublicProductListView(APIView):
         max_lead_time = request.query_params.get('max_lead_time')
         sort_by = request.query_params.get('sort')
 
+        # Check if default unfiltered home catalog query for instant Redis retrieval
+        is_default_query = not any([search, category_slug, collection_slug, vendor_slug, min_price, max_price, min_lead_time, max_lead_time, sort_by])
+        cache_key = "aso_public_products_default_v2" if is_default_query else None
+
+        if cache_key:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return Response(cached)
+
         products = get_public_products(
             search=search,
             category_slug=category_slug,
@@ -109,11 +126,15 @@ class PublicProductListView(APIView):
         )
 
         serializer = ProductListSerializer(products, many=True)
-        return Response({
+        response_data = {
             'success': True,
             'count': len(serializer.data),
             'products': serializer.data
-        })
+        }
+        if cache_key:
+            cache.set(cache_key, response_data, timeout=180)  # 3 min cache for default catalog
+
+        return Response(response_data)
 
     def post(self, request):
         serializer = ProductCreateUpdateSerializer(data=request.data)

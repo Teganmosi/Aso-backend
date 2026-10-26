@@ -70,6 +70,10 @@ def create_product(vendor_profile, validated_data: dict) -> Product:
             is_active=True
         )
 
+    try:
+        cache.delete("aso_public_products_default_v2")
+    except Exception:
+        pass
     return product
 
 
@@ -145,6 +149,10 @@ def update_product(product: Product, validated_data: dict) -> Product:
                     variant.stock_quantity = qty
                 variant.save()
 
+    try:
+        cache.delete("aso_public_products_default_v2")
+    except Exception:
+        pass
     return product
 
 
@@ -157,6 +165,10 @@ def approve_product(product: Product) -> Product:
     product.status = ProductStatus.PUBLISHED
     product.rejection_reason = None
     product.save(update_fields=['approval_status', 'status', 'rejection_reason'])
+    try:
+        cache.delete('aso_public_products_default_v2')
+    except Exception:
+        pass
     return product
 
 
@@ -180,6 +192,10 @@ def delete_product(product: Product) -> None:
     product.is_active = False
     product.status = ProductStatus.ARCHIVED
     product.save(update_fields=['is_active', 'status'])
+    try:
+        cache.delete('aso_public_products_default_v2')
+    except Exception:
+        pass
 
 
 from apps.products.models import ProductVariant, ProductMedia

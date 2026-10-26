@@ -1,4 +1,6 @@
-﻿from django.shortcuts import get_object_or_404
+﻿from django.db.models import Count, Min, Q
+from django.core.cache import cache
+from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
@@ -56,24 +58,43 @@ class VendorListView(APIView):
     """
     Public directory of approved fashion ateliers and designers.
     Supports filtering by verification and category.
+    Optimized with single-query annotations and Redis response caching.
     """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
+        verified_param = request.query_params.get('verified', '')
+        category_param = request.query_params.get('category', '')
+
+        cache_key = f"aso_vendors_list_v2_{verified_param}_{category_param}"
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return Response(cached_data)
+
         qs = VendorProfile.objects.select_related('user').filter(
             status=VendorStatus.APPROVED
-        ).order_by('-average_rating', '-created_at')
+        ).annotate(
+            annotated_product_count=Count(
+                'products',
+                filter=Q(products__status='PUBLISHED', products__is_active=True),
+                distinct=True
+            ),
+            annotated_starting_price=Min(
+                'products__base_price_kobo',
+                filter=Q(products__status='PUBLISHED', products__is_active=True)
+            )
+        ).prefetch_related('products__media').order_by('-average_rating', '-created_at')
 
-        verified_param = request.query_params.get('verified')
         if verified_param in ['true', '1', 'True']:
             qs = qs.filter(is_verified=True)
 
-        category_param = request.query_params.get('category')
         if category_param:
             qs = qs.filter(products__category__slug=category_param, products__status='PUBLISHED').distinct()
 
         serializer = PublicVendorProfileSerializer(qs, many=True)
-        return Response(serializer.data)
+        data = serializer.data
+        cache.set(cache_key, data, timeout=300)  # 5 min cache
+        return Response(data)
 
 
 class VendorDetailView(APIView):

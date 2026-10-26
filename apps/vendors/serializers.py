@@ -15,6 +15,20 @@ class BankAccountSerializer(serializers.ModelSerializer):
         return value
 
 
+class CompactVendorSerializer(serializers.ModelSerializer):
+    """
+    Ultra-lightweight vendor serializer for catalog cards, cart items, reviews, and order listings.
+    Zero N+1 queries. Zero embedded preview image overhead.
+    """
+    class Meta:
+        model = VendorProfile
+        fields = [
+            'id', 'store_name', 'slug', 'city', 'state',
+            'logo_url', 'is_verified', 'average_rating', 'review_count'
+        ]
+        read_only_fields = fields
+
+
 class PublicVendorProfileSerializer(serializers.ModelSerializer):
     """
     Public storefront serializer with real product aggregates (count, starting price, preview images).
@@ -42,9 +56,13 @@ class PublicVendorProfileSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_product_count(self, obj) -> int:
+        if hasattr(obj, 'annotated_product_count'):
+            return obj.annotated_product_count
         return obj.products.filter(status='PUBLISHED', is_active=True).count()
 
     def get_starting_price_naira(self, obj):
+        if hasattr(obj, 'annotated_starting_price') and obj.annotated_starting_price is not None:
+            return round(obj.annotated_starting_price / 100.0, 2)
         lowest = obj.products.filter(status='PUBLISHED', is_active=True).order_by('base_price_kobo').first()
         if lowest:
             return lowest.base_price_naira
@@ -54,7 +72,8 @@ class PublicVendorProfileSerializer(serializers.ModelSerializer):
         images = []
         prods = obj.products.filter(status='PUBLISHED', is_active=True).prefetch_related('media')[:3]
         for p in prods:
-            primary = p.media.filter(is_primary=True).first() or p.media.first()
+            media_list = list(p.media.all())
+            primary = next((m for m in media_list if m.is_primary), None) or (media_list[0] if media_list else None)
             if primary and primary.url:
                 images.append(primary.url)
         return images

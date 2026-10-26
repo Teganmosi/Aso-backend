@@ -42,6 +42,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.gzip.GZipMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -85,6 +86,7 @@ if os.environ.get('USE_SQLITE', 'False') == 'True':
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
+            'CONN_MAX_AGE': int(os.environ.get('DB_CONN_MAX_AGE', 600)),
         }
     }
 else:
@@ -96,6 +98,7 @@ else:
             'PASSWORD': DB_PASSWORD,
             'HOST': DB_HOST,
             'PORT': DB_PORT,
+            'CONN_MAX_AGE': int(os.environ.get('DB_CONN_MAX_AGE', 600)),
         }
     }
     if DB_SSLMODE:
@@ -140,7 +143,7 @@ REST_FRAMEWORK = {
 }
 
 # Session & Cookie Security (HttpOnly Cookie Auth)
-SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_ENGINE = 'django.contrib.sessions.backends.cached_db'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 30  # 30 Days persistence
