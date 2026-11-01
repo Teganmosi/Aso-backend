@@ -1,4 +1,4 @@
-﻿from django.db.models import Count, Min, Q
+from django.db.models import Count, Min, Q
 from django.core.cache import cache
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
@@ -20,7 +20,7 @@ class VendorRegisterView(APIView):
     """
     Allows an authenticated user to apply for a designer vendor storefront.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsVendorOwner]
 
     def post(self, request):
         serializer = VendorRegistrationSerializer(data=request.data)
@@ -162,7 +162,7 @@ class VendorOrderListView(APIView):
     GET: List orders for authenticated vendors, filterable by status.
     Permission: Only the vendor associated with the orders can view them.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsVendorOwner]
 
     def get(self, request):
         orders = Order.objects.filter(
@@ -180,7 +180,7 @@ class VendorOrderDetailView(APIView):
     """
     GET: Retrieve vendor order detail summary.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsVendorOwner]
 
     def get(self, request, order_id):
         try:
@@ -207,7 +207,7 @@ class VendorProfileMeView(APIView):
     GET: Retrieve the authenticated vendor's full profile details.
     PATCH / PUT / POST: Create or Update vendor profile details.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsVendorOwner]
 
     def get(self, request):
         if not hasattr(request.user, 'vendor_profile'):
