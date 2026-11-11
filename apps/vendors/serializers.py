@@ -1,3 +1,4 @@
+import re
 from rest_framework import serializers
 from .models import VendorProfile, BankAccount
 
@@ -83,7 +84,7 @@ class PublicVendorProfileSerializer(serializers.ModelSerializer):
         return sorted(list(set(cats)))
 
     def get_has_started_verification(self, obj) -> bool:
-        return bool(obj.nin_number or obj.cac_number or (obj.kyc_tier and obj.kyc_tier != 'TIER_1_STARTER'))
+        return obj.has_started_verification
 
     def get_whatsapp_phone(self, obj) -> str | None:
         return None
@@ -101,18 +102,34 @@ class VendorProfileSerializer(serializers.ModelSerializer):
     bank_account = BankAccountSerializer(read_only=True)
     lead_designer_name = serializers.SerializerMethodField()
     phone_number = serializers.CharField(source='user.phone_number', read_only=True)
+    has_started_verification = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = VendorProfile
         fields = [
             'id', 'store_name', 'slug', 'description', 'logo_url',
             'banner_url', 'city', 'state', 'status', 'kyc_tier', 'is_verified',
+            'has_started_verification', 'verification_status', 'verification_submitted_at',
+            'verification_rejection_reason',
             'instagram_handle', 'workshop_address', 'landmark',
             'nin_number', 'cac_number', 'average_rating', 'review_count',
             'lead_designer_name', 'phone_number',
             'bank_account', 'created_at'
         ]
-        read_only_fields = ['id', 'slug', 'status', 'kyc_tier', 'is_verified', 'average_rating', 'review_count', 'created_at']
+        read_only_fields = ['id', 'slug', 'status', 'kyc_tier', 'is_verified', 'average_rating', 'review_count', 'created_at',
+                            'verification_status', 'verification_submitted_at', 'verification_rejection_reason']
+
+    def validate_nin_number(self, value):
+        value = (value or '').strip()
+        if value and not (value.isdigit() and len(value) == 11):
+            raise serializers.ValidationError("NIN must be exactly 11 digits.")
+        return value or None
+
+    def validate_cac_number(self, value):
+        value = (value or '').strip().upper()
+        if value and not re.fullmatch(r'(RC|BN|IT)[\s-]?\d{4,9}', value):
+            raise serializers.ValidationError("CAC number should look like RC123456, BN1234567 or IT12345.")
+        return value or None
 
     def get_lead_designer_name(self, obj) -> str:
         if obj.user:
@@ -153,6 +170,12 @@ class VendorRegistrationSerializer(serializers.Serializer):
         if value:
             if not value.isdigit() or len(value) != 11:
                 raise serializers.ValidationError("NIN number must consist of exactly 11 numeric digits.")
+        return value
+
+    def validate_cac_number(self, value):
+        value = (value or '').strip().upper()
+        if value and not re.fullmatch(r'(RC|BN|IT)[\s-]?\d{4,9}', value):
+            raise serializers.ValidationError("CAC number should look like RC123456, BN1234567 or IT12345.")
         return value
 
     def validate(self, data):

@@ -300,3 +300,11 @@ DELLYMAN_BASE_URL = os.environ.get('DELLYMAN_BASE_URL', 'https://dev.dellyman.co
 DELLYMAN_API_KEY = os.environ.get('DELLYMAN_API_KEY', '')
 DELLYMAN_WEBHOOK_SECRET = os.environ.get('DELLYMAN_WEBHOOK_SECRET', '')
 DELLYMAN_COMPANY_ID = os.environ.get('DELLYMAN_COMPANY_ID', '643')
+
+# ---------------------------------------------------------------------------
+# Designer payouts & identity verification (launch policy, Nov 2026)
+# ---------------------------------------------------------------------------
+# Every withdrawal waits for staff approval in Django admin before a Paystack transfer is sent.
+PAYOUTS_REQUIRE_MANUAL_APPROVAL = os.environ.get('PAYOUTS_REQUIRE_MANUAL_APPROVAL', 'True') == 'True'
+# Inbox that is alerted when a designer submits NIN/CAC for verification.
+VERIFICATION_REVIEW_EMAIL = os.environ.get('VERIFICATION_REVIEW_EMAIL', 'designers@asomarketplace.com.ng')

@@ -5,22 +5,31 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 
-from .models import VendorProfile, VendorStatus
+from .models import VendorProfile, VendorStatus, VerificationStatus
+from apps.common.notifications import send_verification_submitted_notification
 from .serializers import (
     VendorRegistrationSerializer, VendorProfileSerializer, PublicVendorProfileSerializer, BankAccountSerializer
 )
 from .services import register_vendor_service, update_bank_account_service
 from .selectors import get_vendor_by_slug, get_vendor_bank_account
-from apps.common.permissions import IsVendorOwner
+from apps.common.permissions import IsVendorOwner, CanApplyAsVendor
 from apps.orders.serializers import VendorOrderSerializer
 from apps.orders.models import Order
+
+
+def _notify_if_newly_submitted(vendor, previous_submitted_at=None):
+    """Alert the Aso verification team when a save put NIN/CAC into the review queue."""
+    if (vendor.verification_status == VerificationStatus.PENDING_REVIEW
+            and vendor.verification_submitted_at
+            and vendor.verification_submitted_at != previous_submitted_at):
+        send_verification_submitted_notification(vendor)
 
 
 class VendorRegisterView(APIView):
     """
     Allows an authenticated user to apply for a designer vendor storefront.
     """
-    permission_classes = [IsVendorOwner]
+    permission_classes = [CanApplyAsVendor]
 
     def post(self, request):
         serializer = VendorRegistrationSerializer(data=request.data)
@@ -45,6 +54,7 @@ class VendorRegisterView(APIView):
             cac_number=data.get('cac_number', ''),
             bank_data=bank_data
         )
+        _notify_if_newly_submitted(vendor_profile)
 
         return Response({
             'success': True,
@@ -207,7 +217,7 @@ class VendorProfileMeView(APIView):
     GET: Retrieve the authenticated vendor's full profile details.
     PATCH / PUT / POST: Create or Update vendor profile details.
     """
-    permission_classes = [IsVendorOwner]
+    permission_classes = [CanApplyAsVendor]
 
     def get(self, request):
         if not hasattr(request.user, 'vendor_profile'):
@@ -254,6 +264,7 @@ class VendorProfileMeView(APIView):
                 nin_number=data.get('nin_number', ''),
                 cac_number=data.get('cac_number', '')
             )
+            _notify_if_newly_submitted(vendor)
             if data.get('logo_url') or data.get('banner_url'):
                 if data.get('logo_url'):
                     vendor.logo_url = data['logo_url']
@@ -262,9 +273,16 @@ class VendorProfileMeView(APIView):
                 vendor.save()
         else:
             vendor = user.vendor_profile
+            previous_submitted_at = vendor.verification_submitted_at
+            # A blank NIN/CAC in a profile save means "not edited", never "erase my identity":
+            # erasing it would silently drop the designer's verification.
+            for identity_field in ('nin_number', 'cac_number'):
+                if identity_field in data and not str(data.get(identity_field) or '').strip():
+                    data.pop(identity_field)
             serializer = VendorProfileSerializer(vendor, data=data, partial=True)
             serializer.is_valid(raise_exception=True)
             serializer.save()
+            _notify_if_newly_submitted(vendor, previous_submitted_at)
 
         return Response({
             'success': True,

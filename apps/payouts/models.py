@@ -15,7 +15,7 @@ class LedgerEntryType(models.TextChoices):
 
 class PayoutStatus(models.TextChoices):
     AVAILABLE = 'AVAILABLE', 'Available'
-    PAYOUT_RESERVED = 'PAYOUT_RESERVED', 'Payout Reserved'
+    PAYOUT_RESERVED = 'PAYOUT_RESERVED', 'Awaiting Admin Approval'
     PROCESSING = 'PROCESSING', 'Processing'
     SUCCESSFUL = 'SUCCESSFUL', 'Successful'
     FAILED = 'FAILED', 'Failed'

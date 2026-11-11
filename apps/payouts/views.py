@@ -7,7 +7,9 @@ from apps.common.permissions import IsVendorOwner
 from .models import PayoutRequest, LedgerEntry
 from apps.vendors.serializers import VendorProfileSerializer
 from .serializers import VendorBalanceSerializer, PayoutWithdrawalSerializer, PayoutRequestSerializer, LedgerEntrySerializer
-from .services import get_or_create_vendor_balance, request_payout, process_payout, resolve_and_verify_kyc
+from django.conf import settings
+from apps.vendors.services import submit_verification_for_review
+from .services import get_or_create_vendor_balance, request_payout, process_payout
 
 
 class VendorBalanceView(APIView):
@@ -39,11 +41,16 @@ class PayoutWithdrawView(APIView):
 
         amount_kobo = serializer.validated_data['amount_kobo']
 
-        # Create payout request (reserves funds atomically)
+        # Create payout request (reserves funds atomically; requires admin-verified identity)
         payout_request = request_payout(vendor_profile, amount_kobo)
 
-        # Trigger Paystack transfer initiation synchronously/asynchronously
-        payout_request = process_payout(payout_request)
+        # Launch policy: every payout waits for staff approval in Django admin before any
+        # Paystack transfer is sent. Flip PAYOUTS_REQUIRE_MANUAL_APPROVAL to automate later.
+        if getattr(settings, 'PAYOUTS_REQUIRE_MANUAL_APPROVAL', True):
+            message = 'Withdrawal request received. Aso will review and send it to your bank account.'
+        else:
+            payout_request = process_payout(payout_request)
+            message = 'Payout requested and is processing.'
 
         # Re-fetch updated balance
         balance = get_or_create_vendor_balance(vendor_profile)
@@ -51,7 +58,7 @@ class PayoutWithdrawView(APIView):
 
         return Response({
             'success': True,
-            'message': 'Payout requested and is processing.',
+            'message': message,
             'payout': PayoutRequestSerializer(payout_request).data,
             'balance': balance_serializer.data
         }, status=status.HTTP_201_CREATED)
@@ -59,8 +66,9 @@ class PayoutWithdrawView(APIView):
 
 class VendorVerifyKYCView(APIView):
     """
-    POST: Triggers automated KYC NUBAN name resolution and NIN/CAC verification.
-    Accessible to any user with a vendor profile (pending or approved).
+    POST: Submits the designer's NIN and/or CAC for verification by an Aso admin.
+    Body (optional): {"nin": "...", "cac_number": "..."}; otherwise the saved profile values are used.
+    Never grants verification itself; staff approve/reject in Django admin.
     """
     permission_classes = [permissions.IsAuthenticated]
 
@@ -72,12 +80,17 @@ class VendorVerifyKYCView(APIView):
 
         vendor_profile = request.user.vendor_profile
         
-        # Verify KYC details
-        vendor_profile = resolve_and_verify_kyc(vendor_profile)
+        nin = request.data.get('nin', request.data.get('nin_number'))
+        cac = request.data.get('cac_number')
+        if nin:
+            nin = str(nin).strip()
+            if not (nin.isdigit() and len(nin) == 11):
+                raise ValidationError({'nin': 'NIN must be exactly 11 digits.'})
+        vendor_profile = submit_verification_for_review(vendor_profile, nin_number=nin or None, cac_number=cac or None)
 
         return Response({
             'success': True,
-            'message': 'KYC verification process completed.',
+            'message': 'Your details have been submitted. Aso will review and verify your account.',
             'vendor': VendorProfileSerializer(vendor_profile).data
         }, status=status.HTTP_200_OK)
 

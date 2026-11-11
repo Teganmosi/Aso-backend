@@ -33,6 +33,10 @@ class UserSerializer(serializers.ModelSerializer):
                 'slug': vp.slug,
                 'status': vp.status,
                 'is_verified': vp.is_verified,
+                'has_started_verification': vp.has_started_verification,
+                'verification_status': vp.verification_status,
+                'verification_rejection_reason': vp.verification_rejection_reason,
+                'kyc_tier': vp.kyc_tier,
             }
         return None
 

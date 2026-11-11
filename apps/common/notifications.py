@@ -149,3 +149,43 @@ def send_payout_initiated_notification(payout_request) -> bool:
     </div>
     """
     return send_transactional_email(subject, html_content, [vendor_email])
+
+
+def send_verification_submitted_notification(vendor) -> bool:
+    """Alerts the Aso verification team that a designer submitted NIN/CAC for review."""
+    review_email = getattr(settings, 'VERIFICATION_REVIEW_EMAIL', '')
+    if not review_email:
+        return False
+    subject = f"[Action needed] Verify designer: {vendor.store_name}"
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #111827;">New designer verification request</h2>
+        <p><strong>{vendor.store_name}</strong> ({vendor.user.email}) submitted identity details for review.</p>
+        <p>NIN provided: {'Yes' if vendor.nin_number else 'No'} &middot; CAC provided: {'Yes' if vendor.cac_number else 'No'}</p>
+        <p>Review and approve or reject it in Django admin &rarr; Vendor profiles &rarr; filter by "Pending Admin Review".</p>
+    </div>
+    """
+    return send_transactional_email(subject, html_content, [review_email])
+
+
+def send_verification_decision_notification(vendor) -> bool:
+    """Tells the designer whether Aso approved or rejected their verification."""
+    approved = vendor.is_verified
+    subject = "You're now a Verified Designer on Aso" if approved else "Action needed: your Aso verification"
+    if approved:
+        body = ("<p>Your identity has been verified. Your storefront now shows the <strong>Verified</strong> badge "
+                "and withdrawals to your bank account are unlocked.</p>")
+    else:
+        reason = vendor.verification_rejection_reason or 'We could not confirm the details you submitted.'
+        body = (f"<p>We couldn't verify your details: {reason}</p>"
+                "<p>Please update your NIN or CAC in your Designer Studio profile and save to resubmit. "
+                "You can keep selling in the meantime.</p>")
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <p>Hello {vendor.store_name},</p>
+        {body}
+        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
+        <p style="color: #6B7280; font-size: 12px;">Aso Marketplace</p>
+    </div>
+    """
+    return send_transactional_email(subject, html_content, [vendor.user.email])

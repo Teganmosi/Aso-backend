@@ -9,6 +9,19 @@ class IsStaffUser(permissions.BasePermission):
         return request.user and request.user.is_authenticated and request.user.is_staff
 
 
+class CanApplyAsVendor(permissions.BasePermission):
+    """
+    Allows any authenticated user to create (or manage) their own vendor profile,
+    except vendors who have been suspended. Unlike IsVendorOwner, it does NOT
+    require an existing vendor_profile, so new designers can register.
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        vendor_profile = getattr(request.user, 'vendor_profile', None)
+        return vendor_profile is None or vendor_profile.status != VendorStatus.SUSPENDED
+
+
 class IsVendorOwner(permissions.BasePermission):
     """
     Allows access to vendor owners accessing their own objects.

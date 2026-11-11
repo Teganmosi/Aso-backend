@@ -7,7 +7,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError, PermissionDenied
 
 from apps.vendors.models import VendorProfile, BankAccount, KYCTier
 from apps.orders.models import Order, OrderStatus
@@ -227,6 +227,13 @@ def request_payout(vendor_profile: VendorProfile, amount_kobo: int) -> PayoutReq
     if amount_kobo <= 0:
         raise ValidationError("Withdrawal amount must be greater than zero.")
 
+    # Only designers whose identity an Aso admin has verified may withdraw (enforced server-side).
+    if not vendor_profile.is_verified:
+        raise PermissionDenied(
+            "Withdrawals are available once Aso has verified your identity. "
+            "Submit your NIN or CAC in your Designer Studio profile for review."
+        )
+
     # Check bank account registration
     try:
         bank_account = vendor_profile.bank_account
@@ -378,6 +385,11 @@ def fail_payout(payout_request: PayoutRequest, reason: str) -> PayoutRequest:
     and release reserved balance back to available.
     """
     with transaction.atomic():
+        payout_request = PayoutRequest.objects.select_for_update().get(id=payout_request.id)
+        # Idempotency guard: only reserved/processing payouts can fail. Replayed or out-of-order
+        # transfer webhooks (e.g. failed -> reversed) must not credit the vendor twice (QA-06).
+        if payout_request.status not in (PayoutStatus.PAYOUT_RESERVED, PayoutStatus.PROCESSING):
+            return payout_request
         payout_request.status = PayoutStatus.FAILED
         payout_request.failure_reason = reason
         payout_request.save(update_fields=['status', 'failure_reason', 'updated_at'])
@@ -397,6 +409,10 @@ def succeed_payout(payout_request: PayoutRequest) -> PayoutRequest:
     Transitions payout request to SUCCESSFUL and clears reserved balance.
     """
     with transaction.atomic():
+        payout_request = PayoutRequest.objects.select_for_update().get(id=payout_request.id)
+        # Idempotency guard: only an in-flight transfer can succeed (QA-06).
+        if payout_request.status != PayoutStatus.PROCESSING:
+            return payout_request
         payout_request.status = PayoutStatus.SUCCESSFUL
         payout_request.save(update_fields=['status', 'updated_at'])
 
@@ -408,87 +424,3 @@ def succeed_payout(payout_request: PayoutRequest) -> PayoutRequest:
             payout_request=payout_request
         )
     return payout_request
-
-
-def resolve_and_verify_kyc(vendor_profile: VendorProfile) -> VendorProfile:
-    """
-    Performs automated KYC & Identity Verification.
-    1. Resolves bank details via Paystack NUBAN resolution.
-    2. Validates that the resolved account name matches the user's name or bank account name.
-    3. Validates NIN (exactly 11 digits format).
-    4. Validates CAC (starts with 'RC' or 'BN' format).
-    5. Upgrades kyc_tier and is_verified status.
-    """
-    try:
-        bank_account = vendor_profile.bank_account
-    except BankAccount.DoesNotExist:
-        raise ValidationError("Please configure a bank account before performing KYC verification.")
-
-    secret_key = getattr(settings, 'PAYSTACK_SECRET_KEY', '')
-    resolved_name = None
-
-    if secret_key and not secret_key.startswith('sk_test_mock'):
-        url = f"https://api.paystack.co/bank/resolve?account_number={bank_account.account_number}&bank_code={bank_account.bank_code}"
-        req = urllib.request.Request(
-            url,
-            headers={
-                "Authorization": f"Bearer {secret_key}",
-                "Content-Type": "application/json",
-                "User-Agent": "AsoMarketplace/1.0",
-            },
-            method="GET",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                resp_data = json.loads(resp.read().decode('utf-8'))
-                if resp_data.get('status') and resp_data.get('data', {}).get('account_name'):
-                    resolved_name = resp_data['data']['account_name']
-        except Exception:
-            resolved_name = bank_account.account_name
-
-    if not resolved_name:
-        # Local mock resolve (assumes NUBAN matches submitted name)
-        resolved_name = bank_account.account_name
-
-    # Validate resolved account name against user name or profile names
-    resolved_lower = resolved_name.lower().strip()
-    user_first = vendor_profile.user.first_name.lower().strip()
-    user_last = vendor_profile.user.last_name.lower().strip()
-    store_name_lower = vendor_profile.store_name.lower().strip()
-    submitted_acc_lower = bank_account.account_name.lower().strip()
-
-    name_matches = (
-        resolved_lower == submitted_acc_lower or
-        user_first in resolved_lower or
-        user_last in resolved_lower or
-        store_name_lower in resolved_lower
-    )
-
-    if not name_matches:
-        raise ValidationError("NUBAN Name Resolution mismatch. Resolved bank name does not match user identity.")
-
-    # Save resolved name back to account
-    bank_account.account_name = resolved_name
-    bank_account.save(update_fields=['account_name'])
-
-    # Determine Tier Promotion
-    # Tier 2: Valid resolved bank name + valid NIN (11 digits)
-    nin = vendor_profile.nin_number
-    has_valid_nin = nin and nin.isdigit() and len(nin) == 11
-
-    if has_valid_nin:
-        vendor_profile.kyc_tier = KYCTier.TIER_2_VERIFIED
-        vendor_profile.is_verified = True
-
-        # Tier 3: Tier 2 verified + valid CAC (starts with RC or BN, or valid format)
-        cac = vendor_profile.cac_number
-        has_valid_cac = cac and (cac.upper().startswith('RC') or cac.upper().startswith('BN') or len(cac) >= 5)
-        if has_valid_cac:
-            vendor_profile.kyc_tier = KYCTier.TIER_3_ENTERPRISE
-    else:
-        # Remain or downgrade to Tier 1 if details are removed
-        vendor_profile.kyc_tier = KYCTier.TIER_1_STARTER
-        vendor_profile.is_verified = False
-
-    vendor_profile.save(update_fields=['kyc_tier', 'is_verified', 'updated_at'])
-    return vendor_profile
