@@ -20,9 +20,8 @@ logs/
 .DS_Store
 cookies.txt
 
-# Test files and test suite outputs
-tests/
-test_*.py
+# Test suite IS version-controlled (QA-30); only ignore local probe scripts
+_probe*.py
 
 # Temporary and probe files
 _probe*
