@@ -1,6 +1,7 @@
 from django.core.cache import cache
 from decimal import Decimal
 from django.conf import settings
+from django.core.files.storage import default_storage
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 from django.utils.text import slugify
@@ -260,11 +261,25 @@ def attach_product_media(product: Product, validated_data: dict) -> ProductMedia
     """
     url = str(validated_data.get('url', ''))
     storage_base = getattr(settings, 'ASO_STORAGE_PUBLIC_BASE', '')
-    if storage_base and url.startswith(storage_base):
+    if url.startswith('/media/') and not url.startswith(f'/media/vendors/{product.vendor_id}/'):
+        # Local uploads: only files from this designer's own folder (not another
+        # designer's photos, and not anyone's logo/avatar uploads).
+        raise ValidationError("You can only attach media from your own vendor storage path.")
+    local_vendor_media = url.startswith('/media/vendors/')
+    if local_vendor_media or (storage_base and url.startswith(storage_base)):
         # Internal storage asset -> must belong to this vendor's namespace
         vendor_prefix = f"/vendors/{product.vendor_id}/"
         if vendor_prefix not in url:
             raise ValidationError("You can only attach media from your own vendor storage path.")
+
+    # Uploads via /api/v1/media/upload/ store "<id>.webp" next to "<id>_thumb.webp".
+    # Fill in the thumbnail so product grids load the small file.
+    if local_vendor_media and not validated_data.get('thumbnail_url') and url.endswith('.webp') \
+            and not url.endswith('_thumb.webp'):
+        thumb_url = url[:-len('.webp')] + '_thumb.webp'
+        thumb_name = thumb_url[len('/media/'):]
+        if default_storage.exists(thumb_name):
+            validated_data['thumbnail_url'] = thumb_url
 
     is_primary = validated_data.get('is_primary', False)
     if is_primary:
@@ -352,8 +367,25 @@ def create_verified_review(customer, product: Product, order_item_id, rating: in
 
 
 
+PUBLIC_LIST_CACHE_KEYS = (
+    'aso_public_products_default_v2',
+    'aso_category_list_v2_True',
+    'aso_category_list_v2_False',
+    # Designer list variants without a category filter (the ones the site requests).
+    'aso_vendors_list_v2__',
+    'aso_vendors_list_v2_true_',
+    'aso_vendors_list_v2_false_',
+)
+
+
 def invalidate_product_caches():
+    """
+    Drop cached public catalogue lists. Deletes known keys only: never call
+    cache.clear(), because the Redis database is shared with the Celery broker
+    and a flush would silently drop queued background jobs. Filtered designer
+    list variants not listed above expire on their own within 5 minutes.
+    """
     try:
-        cache.clear()
+        cache.delete_many(PUBLIC_LIST_CACHE_KEYS)
     except Exception:
         pass

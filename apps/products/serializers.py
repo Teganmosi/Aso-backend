@@ -10,6 +10,21 @@ from apps.products.models import (
     MediaType
 )
 from apps.vendors.serializers import PublicVendorProfileSerializer, CompactVendorSerializer
+from apps.common.media_storage import is_data_uri
+
+
+def _card_image_url(media_items):
+    """
+    Image for product cards and cart lines: the small thumbnail when one exists
+    (uploads since local media storage), otherwise the full image.
+    Primary image first, then the first image.
+    """
+    ordered = [m for m in media_items if m.is_primary] + [
+        m for m in media_items if not m.is_primary and m.media_type == MediaType.IMAGE
+    ]
+    for item in ordered:
+        return item.thumbnail_url or item.url
+    return None
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -121,7 +136,18 @@ class ProductMediaSerializer(serializers.ModelSerializer):
     def validate_url(self, value):
         if not value or not str(value).strip():
             raise serializers.ValidationError("Media URL cannot be blank.")
+        if is_data_uri(value):
+            # Inline base64 images bloated every product response (see
+            # apps/common/media_storage.py). Upload via /api/v1/media/upload/.
+            raise serializers.ValidationError(
+                "Upload the image first (POST /api/v1/media/upload/) and attach the returned URL."
+            )
         return str(value).strip()
+
+    def validate_thumbnail_url(self, value):
+        if is_data_uri(value):
+            raise serializers.ValidationError("Thumbnail must be an uploaded image URL, not inline data.")
+        return value
 
 
 class PresignedUploadUrlRequestSerializer(serializers.Serializer):
@@ -308,14 +334,8 @@ class ProductListSerializer(serializers.ModelSerializer):
         return None
 
     def get_primary_image_url(self, obj):
-        media_items = list(obj.media.all())  # uses prefetch cache
-        for item in media_items:
-            if item.is_primary:
-                return item.url
-        for item in media_items:
-            if item.media_type == MediaType.IMAGE:
-                return item.url
-        return None
+        # Product grids only need the small thumbnail (uses prefetch cache).
+        return _card_image_url(list(obj.media.all()))
 
     def get_available_sizes(self, obj):
         # Python-level filtering over the prefetched variants (cache-bound, no extra queries)
