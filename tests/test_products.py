@@ -81,7 +81,7 @@ class ProductCatalogAPITest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertTrue(response.data["success"])
         self.assertEqual(response.data["product"]["title"], "Royal Silk Agbada")
-        self.assertEqual(response.data["product"]["approval_status"], "APPROVED")
+        self.assertEqual(response.data["product"]["approval_status"], "PENDING")
         self.assertEqual(response.data["product"]["base_price_kobo"], 7500000)
         self.assertEqual(response.data["product"]["base_price_naira"], 75000.0)
 

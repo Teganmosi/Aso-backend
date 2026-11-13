@@ -19,7 +19,10 @@ def create_product(vendor_profile, validated_data: dict) -> Product:
     category = Category.objects.get(id=category_id)
 
     status = validated_data.pop('status', ProductStatus.PUBLISHED)
-    approval_status = validated_data.pop('approval_status', ApprovalStatus.APPROVED)
+    # Every new product waits for admin review (sprint plan A.9 / QA-48).
+    # Designers can never set their own approval status.
+    validated_data.pop('approval_status', None)
+    approval_status = ApprovalStatus.PENDING
     sizes = validated_data.pop('sizes', None)
     colors = validated_data.pop('colors', None)
     stock_qty = validated_data.pop('stock_quantity', 10) or 10
@@ -182,6 +185,11 @@ def reject_product(product: Product, reason: str = None) -> Product:
     if reason:
         product.rejection_reason = reason
     product.save(update_fields=['approval_status', 'rejection_reason'])
+    # A rejected product must leave the public catalogue now, not when the cache expires.
+    try:
+        cache.delete('aso_public_products_default_v2')
+    except Exception:
+        pass
     return product
 
 

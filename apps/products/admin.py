@@ -1,5 +1,6 @@
 from django.contrib import admin
 from apps.products.models import Category, Product, ProductVariant, ProductMedia, Review, ApprovalStatus, ProductStatus
+from apps.products.services import invalidate_product_caches
 
 
 
@@ -50,6 +51,7 @@ class ProductAdmin(admin.ModelAdmin):
             status=ProductStatus.PUBLISHED,
             rejection_reason=None
         )
+        invalidate_product_caches()  # show approved products publicly right away
         self.message_user(request, f"{updated_count} product(s) approved and published.")
 
     @admin.action(description="Reject selected products")
@@ -57,7 +59,16 @@ class ProductAdmin(admin.ModelAdmin):
         updated_count = queryset.update(
             approval_status=ApprovalStatus.REJECTED
         )
-        self.message_user(request, f"{updated_count} product(s) rejected.")
+        invalidate_product_caches()  # remove rejected products from public lists right away
+        self.message_user(
+            request,
+            f"{updated_count} product(s) rejected. Open each one and fill in “Rejection reason” "
+            "so the designer sees what to change in their studio.",
+        )
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        invalidate_product_caches()  # edits in the admin form show up publicly right away
 
 
 @admin.register(ProductVariant)
