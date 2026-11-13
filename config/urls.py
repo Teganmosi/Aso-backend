@@ -1,5 +1,6 @@
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
+from apps.common.views import ImageUploadView, serve_media
 from apps.accounts.views import MeView
 from django.http import HttpResponseRedirect
 from django.conf import settings
@@ -17,6 +18,10 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/auth/', include('apps.accounts.urls')),
     path('api/v1/me/', MeView.as_view(), name='api-me'),
+    path('api/v1/media/upload/', ImageUploadView.as_view(), name='media-upload'),
+    # Uploaded images (product photos, logos, banners). Public by design: only
+    # re-encoded images are ever written here (apps/common/media_storage.py).
+    re_path(r'^media/(?P<path>.+)$', serve_media, name='media'),
     path('api/v1/vendors/', include('apps.vendors.urls')),
     path('api/v1/cart/', include('apps.cart.urls')),
     path('api/v1/orders/', include('apps.orders.urls')),

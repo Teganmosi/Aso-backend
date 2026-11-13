@@ -47,13 +47,13 @@ class CartItemSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_primary_image_url(self, obj) -> str | None:
+        # Cart lines show a small image: use the thumbnail when one exists.
         media_items = list(obj.variant.product.media.all())
-        for item in media_items:
-            if item.is_primary:
-                return item.url
-        for item in media_items:
-            if item.media_type == MediaType.IMAGE:
-                return item.url
+        ordered = [m for m in media_items if m.is_primary] + [
+            m for m in media_items if not m.is_primary and m.media_type == MediaType.IMAGE
+        ]
+        for item in ordered:
+            return item.thumbnail_url or item.url
         return None
 
 

@@ -7,6 +7,7 @@ from rest_framework import status, permissions
 
 from .models import VendorProfile, VendorStatus, VerificationStatus
 from apps.common.notifications import send_verification_submitted_notification
+from apps.common.media_storage import is_data_uri
 from .serializers import (
     VendorRegistrationSerializer, VendorProfileSerializer, PublicVendorProfileSerializer, BankAccountSerializer
 )
@@ -249,6 +250,13 @@ class VendorProfileMeView(APIView):
 
         # If user does not have a vendor profile yet, register one
         if not hasattr(user, 'vendor_profile'):
+            for image_field in ('logo_url', 'banner_url'):
+                if is_data_uri(data.get(image_field)):
+                    return Response({
+                        'success': False,
+                        'message': 'Upload images first (POST /api/v1/media/upload/) and save the returned URL.',
+                        'errors': {image_field: ['Inline image data is not accepted.']},
+                    }, status=status.HTTP_400_BAD_REQUEST)
             store_name = data.get('store_name') or f"{user.first_name or 'Artisan'} Atelier"
             city = data.get('city') or 'Lagos'
             state = data.get('state') or 'Lagos State'

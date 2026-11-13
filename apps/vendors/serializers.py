@@ -1,6 +1,16 @@
 import re
 from rest_framework import serializers
+from apps.common.media_storage import is_data_uri
 from .models import VendorProfile, BankAccount
+
+
+def _reject_inline_image(value):
+    """Logos and banners must be uploaded files, never inline base64 (it bloats every vendor response)."""
+    if is_data_uri(value):
+        raise serializers.ValidationError(
+            "Upload the image first (POST /api/v1/media/upload/) and save the returned URL."
+        )
+    return value
 
 class BankAccountSerializer(serializers.ModelSerializer):
     account_number = serializers.CharField(max_length=10, min_length=10)
@@ -118,6 +128,12 @@ class VendorProfileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'slug', 'status', 'kyc_tier', 'is_verified', 'average_rating', 'review_count', 'created_at',
                             'verification_status', 'verification_submitted_at', 'verification_rejection_reason']
+
+    def validate_logo_url(self, value):
+        return _reject_inline_image(value)
+
+    def validate_banner_url(self, value):
+        return _reject_inline_image(value)
 
     def validate_nin_number(self, value):
         value = (value or '').strip()
