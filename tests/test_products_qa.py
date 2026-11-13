@@ -161,24 +161,32 @@ class CategoryTreeTests(ProductsQABase):
         from io import StringIO
         Category.objects.all().delete()
         call_command('seed_categories', stdout=StringIO())
-        self.assertEqual(Category.objects.count(), 12)  # 4 roots + 8 children
+        # Launch taxonomy (seed_categories.py): 4 roots + 18 subcategories
+        self.assertEqual(Category.objects.count(), 22)
         roots = {c.name for c in Category.objects.filter(parent__isnull=True)}
-        self.assertEqual(roots, {'Men', 'Women', 'Unisex', 'Accessories'})
+        self.assertEqual(roots, {'Men', 'Women', 'Traditional & Heritage', 'Accessories'})
         men_children = {c.name for c in Category.objects.get(name='Men').children.all()}
-        self.assertIn('Agbada', men_children)
+        self.assertIn('Agbada & Grand Native Sets', men_children)
+        self.assertEqual(Category.objects.get(name='Women').children.count(), 7)
 
         # Running twice must not duplicate
         call_command('seed_categories', stdout=StringIO())
-        self.assertEqual(Category.objects.count(), 12)
+        self.assertEqual(Category.objects.count(), 22)
 
     def test_public_category_list_is_nested_and_anonymous_friendly(self):
-        res = APIClient().get('/api/v1/categories/')
+        # Tree view: roots only (display_order, then name) with children nested.
+        res = APIClient().get('/api/v1/categories/?parent_only=true')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         names = [c['name'] for c in res.data['categories']]
-        self.assertEqual(names, ['Men', 'Women'])  # roots only, display_order then name
+        self.assertEqual(names, ['Men', 'Women'])
         men = res.data['categories'][0]
         child_names = {c['name'] for c in men['children']}
         self.assertEqual(child_names, {'Agbada', 'Kaftan'})
+
+        # Default view (used by the studio picker): every active category, anonymously.
+        flat = APIClient().get('/api/v1/categories/')
+        self.assertEqual(flat.status_code, status.HTTP_200_OK)
+        self.assertEqual({c['name'] for c in flat.data['categories']}, {'Men', 'Women', 'Agbada', 'Kaftan'})
 
     def test_inactive_categories_hidden_from_list_and_detail(self):
         self.women.is_active = False

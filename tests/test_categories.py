@@ -26,11 +26,17 @@ class CategoryModelAndAPITest(TestCase):
         self.assertEqual(cat_duplicate.slug, 'men-1')
 
     def test_category_list_api(self):
+        # Default: every active category, flat. The studio's category picker and
+        # the storefront pages rely on subcategories being in this list.
         response = self.client.get('/api/v1/categories/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['success'])
-        self.assertEqual(len(response.data['categories']), 1)
-        parent_data = response.data['categories'][0]
+        self.assertEqual({c['name'] for c in response.data['categories']}, {'Men', 'Agbada'})
+
+        # ?parent_only=true: roots with their children nested.
+        tree = self.client.get('/api/v1/categories/?parent_only=true')
+        self.assertEqual(len(tree.data['categories']), 1)
+        parent_data = tree.data['categories'][0]
         self.assertEqual(parent_data['name'], 'Men')
         self.assertEqual(len(parent_data['children']), 1)
         self.assertEqual(parent_data['children'][0]['name'], 'Agbada')

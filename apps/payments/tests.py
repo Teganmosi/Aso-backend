@@ -3,6 +3,7 @@ import hashlib
 import json
 import uuid
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -21,6 +22,30 @@ from apps.payments.services import (
 )
 
 PAYSTACK_SECRET_KEY = 'sk_test_mock_paystack_secret_key_12345'
+
+
+class _FakePaystackResponse:
+    """Stands in for Paystack's /transaction/initialize HTTP response (no network in tests)."""
+
+    def __init__(self, payload):
+        self._body = json.dumps(payload).encode('utf-8')
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def fake_paystack_initialize(req, timeout=None):
+    reference = json.loads(req.data.decode('utf-8'))['reference']
+    return _FakePaystackResponse({
+        'status': True,
+        'data': {'authorization_url': f'https://checkout.paystack.com/{reference}', 'reference': reference},
+    })
 
 
 class PaymentProviderModelTest(TestCase):
@@ -230,6 +255,10 @@ class PaymentInitializationTest(TestCase):
     """Test payment initialization endpoint logic and service."""
 
     def setUp(self):
+        # Paystack's HTTP API is faked; tests never hit the network.
+        paystack_patch = patch('urllib.request.urlopen', side_effect=fake_paystack_initialize)
+        self.mock_urlopen = paystack_patch.start()
+        self.addCleanup(paystack_patch.stop)
         self.client = APIClient()
 
         self.customer = User.objects.create_user(
@@ -287,6 +316,22 @@ class PaymentInitializationTest(TestCase):
         self.assertEqual(payment_request.status, 'PENDING')
         self.assertTrue(payment_request.reference.startswith(f"ASO-{self.order.order_number}"))
         self.assertTrue(payment_request.authorization_url.startswith('https://checkout.paystack.com/'))
+
+    def test_paystack_outage_returns_503_not_a_fake_checkout_link(self):
+        """If Paystack fails, the shopper gets a clear error, never a mock payment link."""
+        self.mock_urlopen.side_effect = OSError('Paystack unreachable')
+        self.client.force_authenticate(user=self.customer)
+        res = self.client.post('/api/v1/payments/initialize/', {'order_id': str(self.order.id)}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertIn('try again', res.data['error']['message'])
+        self.assertFalse(
+            PaymentRequest.objects.filter(order=self.order, authorization_url__contains='mock_payment').exists())
+
+    @override_settings(PAYMENTS_ALLOW_MOCK_CHECKOUT=True)
+    def test_mock_checkout_only_when_explicitly_enabled(self):
+        self.mock_urlopen.side_effect = OSError('Paystack unreachable')
+        payment_request = initialize_payment(self.order)
+        self.assertIn('mock_payment=true', payment_request.authorization_url)
 
     def test_api_initialize_payment_unauthenticated_fails(self):
         """Test that unauthenticated requests to initialize endpoint are rejected."""

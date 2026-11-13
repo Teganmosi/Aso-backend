@@ -301,6 +301,10 @@ DELLYMAN_API_KEY = os.environ.get('DELLYMAN_API_KEY', '')
 DELLYMAN_WEBHOOK_SECRET = os.environ.get('DELLYMAN_WEBHOOK_SECRET', '')
 DELLYMAN_COMPANY_ID = os.environ.get('DELLYMAN_COMPANY_ID', '643')
 
+# Mock checkout links when Paystack is unavailable. Local development only:
+# never enable in production (customers would get a fake payment link).
+PAYMENTS_ALLOW_MOCK_CHECKOUT = os.environ.get('PAYMENTS_ALLOW_MOCK_CHECKOUT', 'False') == 'True'
+
 # NVIDIA NIM: Tier 2 (AI) check in the order-chat anti-bypass guard
 # (apps/orders/anti_bypass.py). These were never defined in settings, so the
 # AI tier silently never ran. With no key it stays off and the regex tier

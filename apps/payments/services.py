@@ -13,8 +13,16 @@ from rest_framework.request import Request
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.exceptions import APIException
 from apps.orders.models import Order, OrderStatus
 from .models import PaymentProvider, PaymentRequest, PaymentWebhookLog
+
+
+class PaymentGatewayUnavailable(APIException):
+    """Paystack did not return a checkout link (down, slow, or misconfigured keys)."""
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = 'Payment service is temporarily unavailable. Your order is saved; please try again in a moment.'
+    default_code = 'payment_gateway_unavailable'
 
 
 
@@ -144,9 +152,15 @@ def initialize_payment(order: Order) -> PaymentRequest:
         except Exception as e:
             logger.error(f"Paystack initialize error for order {order.order_number}: {e}")
 
-    # Fallback to local mock order flow only if Paystack is completely unreachable/offline
     if not authorization_url:
-        authorization_url = f"{frontend_url}/orders?mock_payment=true&reference={reference}&order_id={order.id}"
+        if getattr(settings, 'PAYMENTS_ALLOW_MOCK_CHECKOUT', False):
+            # Local development only: lets checkout run without Paystack.
+            authorization_url = f"{frontend_url}/orders?mock_payment=true&reference={reference}&order_id={order.id}"
+        else:
+            # Never send a real customer to a fake checkout link. Previously any
+            # Paystack error silently redirected shoppers to /orders with an
+            # unpaid order and no explanation.
+            raise PaymentGatewayUnavailable()
 
     payment_request.authorization_url = authorization_url
     payment_request.reference = reference
