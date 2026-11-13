@@ -59,7 +59,7 @@ class VendorRegisterView(APIView):
 
         return Response({
             'success': True,
-            'message': 'Vendor application submitted successfully. Pending admin approval.',
+            'message': 'Your studio is live. Add your first piece; each piece is reviewed before it appears publicly.',
             'vendor': VendorProfileSerializer(vendor_profile).data
         }, status=status.HTTP_201_CREATED)
 
@@ -82,25 +82,27 @@ class VendorListView(APIView):
         if cached_data is not None:
             return Response(cached_data)
 
+        # Only products a shopper can actually see count (approved, published, active),
+        # so pending pieces never set a studio's "from" price.
+        live_products = Q(products__status='PUBLISHED', products__is_active=True,
+                          products__approval_status='APPROVED')
         qs = VendorProfile.objects.select_related('user').filter(
             status=VendorStatus.APPROVED
         ).annotate(
-            annotated_product_count=Count(
-                'products',
-                filter=Q(products__status='PUBLISHED', products__is_active=True),
-                distinct=True
-            ),
-            annotated_starting_price=Min(
-                'products__base_price_kobo',
-                filter=Q(products__status='PUBLISHED', products__is_active=True)
-            )
+            annotated_product_count=Count('products', filter=live_products, distinct=True),
+            annotated_starting_price=Min('products__base_price_kobo', filter=live_products)
+        ).filter(
+            # The public directory lists studios with something to buy. Empty studios
+            # are still reachable by their direct /store/<slug> link.
+            annotated_product_count__gt=0
         ).prefetch_related('products__media').order_by('-average_rating', '-created_at')
 
         if verified_param in ['true', '1', 'True']:
             qs = qs.filter(is_verified=True)
 
         if category_param:
-            qs = qs.filter(products__category__slug=category_param, products__status='PUBLISHED').distinct()
+            qs = qs.filter(products__category__slug=category_param, products__status='PUBLISHED',
+                           products__is_active=True, products__approval_status='APPROVED').distinct()
 
         serializer = PublicVendorProfileSerializer(qs, many=True)
         data = serializer.data

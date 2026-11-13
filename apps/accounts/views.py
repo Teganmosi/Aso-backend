@@ -12,7 +12,7 @@ from .serializers import (
 )
 from .services import create_user_service, create_address_service
 from .selectors import get_user_addresses
-from .models import Address
+from .models import Address, CustomerProfile
 
 
 class CSRFTokenView(APIView):
