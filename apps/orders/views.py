@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError
-from apps.orders.models import Order
+from apps.orders.models import Order, OrderStatus
 from apps.orders.serializers import OrderSerializer, OrderCreateSerializer
 from apps.orders.services import create_order_from_cart, accept_order, move_to_preparing, mark_ready_for_pickup
 
@@ -378,4 +378,52 @@ class OrderActionResolveView(APIView):
             'success': True,
             'message': 'Measurement confirmed and cut sheet updated.',
             'data': OrderMessageSerializer(audit_msg).data
+        }, status=status.HTTP_200_OK)
+
+
+class OrderDisputeView(APIView):
+    """
+    POST {reason}: the shopper reports a problem with a delivered order (wrong fit, damage, not received).
+    The order moves to DISPUTED, which stops the automatic escrow release, the reason is posted in the
+    order chat, and the Aso team is emailed to resolve it in Django admin.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, order_id):
+        from django.conf import settings
+        from django.utils import timezone
+        from datetime import timedelta
+        from apps.orders.models import OrderMessage, MessageType
+        from apps.common.notifications import send_dispute_opened_notification
+
+        order = Order.objects.select_related('vendor__user', 'customer').filter(
+            id=order_id, customer=request.user).first()
+        if not order:
+            return Response({'detail': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        reason = str(request.data.get('reason', '')).strip()
+        if len(reason) < 10:
+            return Response({'detail': 'Please tell us what went wrong (at least a sentence).'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if order.order_status != OrderStatus.DELIVERED:
+            return Response({'detail': 'You can report a problem once your order has been delivered '
+                                       'and before it is completed.'}, status=status.HTTP_400_BAD_REQUEST)
+        window = getattr(settings, 'DISPUTE_WINDOW_HOURS', 48)
+        delivered_at = getattr(getattr(order, 'delivery', None), 'delivered_at', None)
+        if delivered_at and timezone.now() > delivered_at + timedelta(hours=window):
+            return Response({'detail': f'The {window}-hour window to report a problem has passed. '
+                                       'Please contact us and we will help.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        order.order_status = OrderStatus.DISPUTED
+        order.save(update_fields=['order_status', 'updated_at'])
+        OrderMessage.objects.create(
+            order=order, sender=request.user, message_type=MessageType.SYSTEM_AUDIT,
+            content=f"The shopper reported a problem: {reason[:1000]}. Payment is on hold while Aso reviews it.",
+            original_content=reason[:1000],
+        )
+        send_dispute_opened_notification(order, reason[:1000])
+        return Response({
+            'success': True,
+            'message': 'Thanks for telling us. Your payment is on hold and the Aso team will contact you within 1 working day.',
+            'data': OrderSerializer(order).data,
         }, status=status.HTTP_200_OK)

@@ -11,7 +11,7 @@ services:
       dockerfile: Dockerfile
     container_name: aso_backend
     restart: always
-    environment:
+    environment: &backend_env
       - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in the Portainer stack environment}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-asomarketplace.com.ng,www.asomarketplace.com.ng,api.asomarketplace.com.ng,app-69-164-247-208.sslip.io,api-69-164-247-208.sslip.io,69.164.247.208,localhost,127.0.0.1,aso_backend}
@@ -27,6 +27,15 @@ services:
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://asomarketplace.com.ng,https://www.asomarketplace.com.ng,https://api.asomarketplace.com.ng,https://app-69-164-247-208.sslip.io,http://69.164.247.208:3000,http://localhost:5173,http://localhost:3000}
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-https://asomarketplace.com.ng,https://www.asomarketplace.com.ng,https://api.asomarketplace.com.ng,https://app-69-164-247-208.sslip.io,https://api-69-164-247-208.sslip.io,http://69.164.247.208:3000,http://localhost:5173,http://localhost:3000}
       - FRONTEND_URL=${FRONTEND_URL:-https://asomarketplace.com.ng}
+      - NUM_PROXIES=${NUM_PROXIES:-1}
+      - DELIVERY_FLAT_FEE_SAME_STATE_NAIRA=${DELIVERY_FLAT_FEE_SAME_STATE_NAIRA:-0}
+      - DELIVERY_FLAT_FEE_INTERSTATE_NAIRA=${DELIVERY_FLAT_FEE_INTERSTATE_NAIRA:-0}
+      - EMAIL_HOST=${EMAIL_HOST:-}
+      - EMAIL_PORT=${EMAIL_PORT:-587}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER:-}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD:-}
+      - EMAIL_USE_TLS=${EMAIL_USE_TLS:-True}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL:-Aso Marketplace <hello@asomarketplace.com.ng>}
       - PAYSTACK_SECRET_KEY=${PAYSTACK_SECRET_KEY:?Set PAYSTACK_SECRET_KEY in the Portainer stack environment}
       - PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY:-pk_test_mock_paystack_public_key}
       - ASO_STORAGE_PUBLIC_BASE=${ASO_STORAGE_PUBLIC_BASE:-https://cdn.aso.ng}
@@ -39,6 +48,33 @@ services:
     volumes:
       - aso_media_data:/app/media
       - aso_static_data:/app/staticfiles
+    networks:
+      - aso-network
+
+  # Runs the money and stock jobs every 5 minutes. Without it, designers are never paid
+  # (escrow is released by process_completed_orders), stock from abandoned checkouts is never
+  # returned, and orders not accepted within 48 hours are never cancelled.
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aso_scheduler
+    restart: always
+    depends_on:
+      - backend
+    environment: *backend_env
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        sleep 60
+        while true; do
+          python manage.py run_expired_order_cleanup || echo "expired-order cleanup failed"
+          python manage.py check_vendor_sla_timeouts || echo "SLA timeout check failed"
+          python manage.py process_completed_orders || echo "escrow release failed"
+          sleep 300
+        done
+    volumes:
+      - aso_media_data:/app/media
     networks:
       - aso-network
 

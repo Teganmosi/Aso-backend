@@ -1,3 +1,4 @@
+from apps.common.notifications import send_product_review_notification
 from django.contrib import admin
 from apps.products.models import Category, Product, ProductVariant, ProductMedia, Review, ApprovalStatus, ProductStatus
 from apps.products.services import invalidate_product_caches
@@ -46,13 +47,18 @@ class ProductAdmin(admin.ModelAdmin):
 
     @admin.action(description="Approve selected products and mark as PUBLISHED")
     def approve_selected_products(self, request, queryset):
+        newly_approved = list(queryset.exclude(approval_status=ApprovalStatus.APPROVED)
+                              .select_related('vendor__user'))
         updated_count = queryset.update(
             approval_status=ApprovalStatus.APPROVED,
             status=ProductStatus.PUBLISHED,
             rejection_reason=None
         )
         invalidate_product_caches()  # show approved products publicly right away
-        self.message_user(request, f"{updated_count} product(s) approved and published.")
+        for product in newly_approved:
+            send_product_review_notification(product, approved=True)
+        self.message_user(request, f"{updated_count} product(s) approved and published. "
+                                   f"{len(newly_approved)} designer email(s) sent.")
 
     @admin.action(description="Reject selected products")
     def reject_selected_products(self, request, queryset):
@@ -62,13 +68,19 @@ class ProductAdmin(admin.ModelAdmin):
         invalidate_product_caches()  # remove rejected products from public lists right away
         self.message_user(
             request,
-            f"{updated_count} product(s) rejected. Open each one and fill in “Rejection reason” "
-            "so the designer sees what to change in their studio.",
+            f"{updated_count} product(s) rejected. Open each one and fill in “Rejection reason”: "
+            "the designer is emailed what to change when you save it.",
         )
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         invalidate_product_caches()  # edits in the admin form show up publicly right away
+        review_changed = change and {'approval_status', 'rejection_reason'} & set(form.changed_data)
+        if review_changed:
+            if obj.approval_status == ApprovalStatus.REJECTED and obj.rejection_reason:
+                send_product_review_notification(obj, approved=False)
+            elif obj.approval_status == ApprovalStatus.APPROVED and 'approval_status' in form.changed_data:
+                send_product_review_notification(obj, approved=True)
 
 
 @admin.register(ProductVariant)

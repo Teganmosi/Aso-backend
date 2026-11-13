@@ -114,6 +114,8 @@ class VendorProfile(UUIDModel):
         return update_fields
 
     def save(self, *args, **kwargs):
+        from apps.common.nigeria import normalize_state
+        self.state = normalize_state(self.state)
         update_fields = self._sync_verification_with_identity(kwargs.get('update_fields'))
         if update_fields is not None:
             kwargs['update_fields'] = update_fields

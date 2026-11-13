@@ -13,22 +13,22 @@ def send_transactional_email(subject: str, html_message: str, recipient_list: li
     if not recipient_list:
         return False
 
-    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'Aso Marketplace <notifications@aso.ng>')
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'Aso Marketplace <hello@asomarketplace.com.ng>')
     plain_message = strip_tags(html_message)
 
     try:
-        send_mail(
+        sent = send_mail(
             subject=subject,
             message=plain_message,
             from_email=from_email,
             recipient_list=recipient_list,
             html_message=html_message,
-            fail_silently=True
+            fail_silently=False,
         )
-        logger.info(f"Transactional email '{subject}' sent to {recipient_list}")
-        return True
+        logger.info("Transactional email '%s' sent to %d recipient(s)", subject, sent)
+        return bool(sent)
     except Exception as e:
-        logger.error(f"Failed to send transactional email '{subject}' to {recipient_list}: {str(e)}")
+        logger.error("Failed to send transactional email '%s': %s", subject, e)
         return False
 
 
@@ -189,3 +189,91 @@ def send_verification_decision_notification(vendor) -> bool:
     </div>
     """
     return send_transactional_email(subject, html_content, [vendor.user.email])
+
+
+def send_password_reset_email(user) -> bool:
+    """Emails a one-time link (valid for PASSWORD_RESET_TIMEOUT) to choose a new password."""
+    from django.contrib.auth.tokens import default_token_generator
+    from django.utils.encoding import force_bytes
+    from django.utils.http import urlsafe_base64_encode
+
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    base = getattr(settings, 'FRONTEND_URL', 'https://asomarketplace.com.ng').rstrip('/')
+    link = f"{base}/reset-password?uid={uid}&token={token}"
+    name = user.first_name or 'there'
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #111827;">Reset your Aso password</h2>
+        <p>Hi {name},</p>
+        <p>We received a request to reset the password for your Aso account. Choose a new one here:</p>
+        <p style="margin: 24px 0;">
+            <a href="{link}" style="background: #064E3B; color: #ffffff; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold;">Choose a new password</a>
+        </p>
+        <p>This link works for 2 hours and can be used once. If you didn't ask for this, you can ignore this email; your password won't change.</p>
+        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
+        <p style="color: #6B7280; font-size: 12px;">Aso Marketplace</p>
+    </div>
+    """
+    return send_transactional_email("Reset your Aso password", html_content, [user.email])
+
+
+def send_product_review_notification(product, approved: bool) -> bool:
+    """Tells the designer their piece is live, or what to change before it can go live."""
+    vendor = product.vendor
+    base = getattr(settings, 'FRONTEND_URL', 'https://asomarketplace.com.ng').rstrip('/')
+    if approved:
+        subject = f"Your piece is live on Aso: {product.title}"
+        body = (f"<p>Good news: <strong>{product.title}</strong> has been approved and shoppers can now buy it.</p>"
+                f"<p><a href=\"{base}/products/{product.slug}\">See it on Aso</a></p>")
+    else:
+        subject = f"Changes needed: {product.title}"
+        body = (f"<p>We reviewed <strong>{product.title}</strong> and it needs a change before it can go live:</p>"
+                f"<p style=\"background:#FEF3C7;padding:12px;border-radius:6px;\">{product.rejection_reason}</p>"
+                f"<p>Edit the piece in your <a href=\"{base}/vendor/products\">Designer Studio</a> and save it to send it back for review.</p>")
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <p>Hello {vendor.store_name},</p>
+        {body}
+        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
+        <p style="color: #6B7280; font-size: 12px;">Aso Marketplace</p>
+    </div>
+    """
+    return send_transactional_email(subject, html_content, [vendor.user.email])
+
+
+def send_manual_courier_request(order, pickup_address, pickup_phone, dest_address, dest_phone) -> bool:
+    """The courier API couldn't book a rider: ask the Aso team to book one by hand."""
+    ops_email = getattr(settings, 'OPS_EMAIL', '') or getattr(settings, 'VERIFICATION_REVIEW_EMAIL', '')
+    if not ops_email:
+        return False
+    snap = order.shipping_address_snapshot or {}
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #B45309;">Book a rider by hand: order #{order.order_number}</h2>
+        <p>{order.vendor.store_name} marked this order ready for pickup, but no courier was booked automatically
+        (Dellyman API key missing or the booking failed). Please book a rider and tell the studio the pickup time.</p>
+        <p><strong>Pickup:</strong> {order.vendor.store_name}, {pickup_address} (phone {pickup_phone or 'not set'})</p>
+        <p><strong>Drop-off:</strong> {snap.get('full_name', '')}, {dest_address} (phone {dest_phone or 'not set'})</p>
+        <p><strong>Delivery fee charged to the shopper:</strong> ₦{order.delivery_fee_naira:,.2f}</p>
+    </div>
+    """
+    return send_transactional_email(f"[Action needed] Book a rider: #{order.order_number}", html_content, [ops_email])
+
+
+def send_dispute_opened_notification(order, reason: str) -> bool:
+    """A shopper reported a problem: alert the Aso team (payment is already on hold)."""
+    ops_email = getattr(settings, 'OPS_EMAIL', '') or getattr(settings, 'VERIFICATION_REVIEW_EMAIL', '')
+    if not ops_email:
+        return False
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #B91C1C;">Problem reported: order #{order.order_number}</h2>
+        <p><strong>Designer:</strong> {order.vendor.store_name}</p>
+        <p><strong>What the shopper said:</strong></p>
+        <p style="background:#FEF2F2;padding:12px;border-radius:6px;">{reason}</p>
+        <p>The designer's payment is on hold. Resolve it in Django admin → Orders: "Resolve dispute" releases the
+        payment to the designer; "Cancel" stops it (then refund the shopper in the Paystack dashboard).</p>
+    </div>
+    """
+    return send_transactional_email(f"[Action needed] Problem reported: #{order.order_number}", html_content, [ops_email])

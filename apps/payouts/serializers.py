@@ -11,6 +11,9 @@ class VendorBalanceSerializer(serializers.ModelSerializer):
     pending_balance_naira = serializers.SerializerMethodField()
     available_balance_naira = serializers.SerializerMethodField()
     reserved_payout_balance_naira = serializers.SerializerMethodField()
+    reserved_balance_naira = serializers.SerializerMethodField()
+    withdrawn_balance_kobo = serializers.SerializerMethodField()
+    withdrawn_balance_naira = serializers.SerializerMethodField()
 
     class Meta:
         model = VendorBalance
@@ -20,7 +23,14 @@ class VendorBalanceSerializer(serializers.ModelSerializer):
             'reserved_payout_balance',
             'pending_balance_naira', 
             'available_balance_naira', 
-            'reserved_payout_balance_naira'
+            'reserved_payout_balance_naira',
+            # Same amounts under the *_kobo names the studio dashboard reads.
+            'pending_balance_kobo',
+            'available_balance_kobo',
+            'reserved_balance_kobo',
+            'reserved_balance_naira',
+            'withdrawn_balance_kobo',
+            'withdrawn_balance_naira',
         ]
 
     def get_pending_balance_naira(self, obj) -> float:
@@ -31,6 +41,18 @@ class VendorBalanceSerializer(serializers.ModelSerializer):
 
     def get_reserved_payout_balance_naira(self, obj) -> float:
         return round(obj.reserved_balance_kobo / 100.0, 2)
+
+    def get_reserved_balance_naira(self, obj) -> float:
+        return round(obj.reserved_balance_kobo / 100.0, 2)
+
+    def get_withdrawn_balance_kobo(self, obj) -> int:
+        from django.db.models import Sum
+        from apps.payouts.models import PayoutRequest, PayoutStatus
+        total = PayoutRequest.objects.filter(vendor=obj.vendor, status=PayoutStatus.SUCCESSFUL).aggregate(t=Sum('amount_kobo'))['t']
+        return int(total or 0)
+
+    def get_withdrawn_balance_naira(self, obj) -> float:
+        return round(self.get_withdrawn_balance_kobo(obj) / 100.0, 2)
 
 
 class PayoutWithdrawalSerializer(serializers.Serializer):
