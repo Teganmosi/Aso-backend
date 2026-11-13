@@ -301,6 +301,14 @@ DELLYMAN_API_KEY = os.environ.get('DELLYMAN_API_KEY', '')
 DELLYMAN_WEBHOOK_SECRET = os.environ.get('DELLYMAN_WEBHOOK_SECRET', '')
 DELLYMAN_COMPANY_ID = os.environ.get('DELLYMAN_COMPANY_ID', '643')
 
+# NVIDIA NIM: Tier 2 (AI) check in the order-chat anti-bypass guard
+# (apps/orders/anti_bypass.py). These were never defined in settings, so the
+# AI tier silently never ran. With no key it stays off and the regex tier
+# still applies; calls time out after 3 s and fail open.
+NVIDIA_NIM_API_KEY = os.environ.get('NVIDIA_NIM_API_KEY', '')
+NVIDIA_NIM_MODEL = os.environ.get('NVIDIA_NIM_MODEL', 'nvidia/nemotron-3.5-lightning-30b-a3b')
+NVIDIA_NIM_BASE_URL = os.environ.get('NVIDIA_NIM_BASE_URL', 'https://integrate.api.nvidia.com/v1')
+
 # ---------------------------------------------------------------------------
 # Designer payouts & identity verification (launch policy, Nov 2026)
 # ---------------------------------------------------------------------------

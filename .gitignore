@@ -33,3 +33,7 @@ _probe*
 .idea/
 
 
+
+# Real environment files never go in git (repo is public); use .env.example as the template
+.env.*
+!.env.example
