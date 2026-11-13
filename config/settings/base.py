@@ -131,6 +131,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Django REST Framework Settings
 REST_FRAMEWORK = {
+    # Caddy sits in front of Django; read the visitor's IP from X-Forwarded-For so rate limits are per visitor.
+    'NUM_PROXIES': int(os.environ.get('NUM_PROXIES', '0')) or None,
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
     ],
@@ -283,6 +285,28 @@ LOGGING = {
 
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
 
+# Transactional email (order, payment, password reset). Without EMAIL_HOST nothing can be
+# delivered, so emails are written to the log instead of silently failing over SMTP.
+# Resend SMTP example: EMAIL_HOST=smtp.resend.com EMAIL_PORT=587 EMAIL_HOST_USER=resend
+#                      EMAIL_HOST_PASSWORD=<Resend API key> EMAIL_USE_TLS=True
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_TIMEOUT = 10
+EMAIL_BACKEND = (
+    'django.core.mail.backends.smtp.EmailBackend' if EMAIL_HOST
+    else 'django.core.mail.backends.console.EmailBackend'
+)
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Aso Marketplace <hello@asomarketplace.com.ng>')
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 2  # reset links work for 2 hours
+
+# Delivery fee charged at checkout when there is no live Dellyman quote (e.g. no API key yet).
+# 0 = delivery included for the shopper; Aso pays the courier.
+DELIVERY_FLAT_FEE_SAME_STATE_NAIRA = float(os.environ.get('DELIVERY_FLAT_FEE_SAME_STATE_NAIRA', '0'))
+DELIVERY_FLAT_FEE_INTERSTATE_NAIRA = float(os.environ.get('DELIVERY_FLAT_FEE_INTERSTATE_NAIRA', '0'))
+
 
 # Redis 7 Cache Configuration
 REDIS_URL = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0')
@@ -320,3 +344,7 @@ NVIDIA_NIM_BASE_URL = os.environ.get('NVIDIA_NIM_BASE_URL', 'https://integrate.a
 PAYOUTS_REQUIRE_MANUAL_APPROVAL = os.environ.get('PAYOUTS_REQUIRE_MANUAL_APPROVAL', 'True') == 'True'
 # Inbox that is alerted when a designer submits NIN/CAC for verification.
 VERIFICATION_REVIEW_EMAIL = os.environ.get('VERIFICATION_REVIEW_EMAIL', 'designers@asomarketplace.com.ng')
+# Where operational alerts go (e.g. a rider must be booked by hand). Defaults to the review inbox.
+OPS_EMAIL = os.environ.get('OPS_EMAIL', VERIFICATION_REVIEW_EMAIL)
+# Hours after delivery a shopper can report a problem (matches the published buyer-protection policy).
+DISPUTE_WINDOW_HOURS = 48

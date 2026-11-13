@@ -37,6 +37,9 @@ class UserSerializer(serializers.ModelSerializer):
                 'verification_status': vp.verification_status,
                 'verification_rejection_reason': vp.verification_rejection_reason,
                 'kyc_tier': vp.kyc_tier,
+                'logo_url': vp.logo_url,
+                'banner_url': vp.banner_url,
+                'has_bank_account': hasattr(vp, 'bank_account'),
             }
         return None
 

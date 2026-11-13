@@ -25,6 +25,75 @@ def generate_tracking_number() -> str:
             return tracking_number
 
 
+def _flat_fee_kobo(is_interstate: bool) -> int:
+    from django.conf import settings
+    naira = getattr(settings, 'DELIVERY_FLAT_FEE_INTERSTATE_NAIRA' if is_interstate
+                    else 'DELIVERY_FLAT_FEE_SAME_STATE_NAIRA', 0) or 0
+    return int(round(float(naira) * 100))
+
+
+def quote_delivery(address, vendor=None) -> dict:
+    """
+    The delivery fee for sending an order from `vendor` to `address`.
+
+    Used by the checkout quote AND by order creation, so the shopper is charged exactly what
+    they were shown. Order of preference: live Dellyman quote, then the flat fee set in
+    DELIVERY_FLAT_FEE_SAME_STATE_NAIRA / DELIVERY_FLAT_FEE_INTERSTATE_NAIRA, then 0
+    (delivery included: Aso pays the courier).
+    """
+    from apps.common.nigeria import normalize_state, same_state
+
+    vendor_city = (getattr(vendor, 'city', '') or 'Lagos').strip()
+    vendor_state = normalize_state(getattr(vendor, 'state', '')) or 'Lagos'
+    workshop = (getattr(vendor, 'workshop_address', '') or '').strip()
+    # Never quote from a made-up street: without a workshop address, quote city to city.
+    pickup_addr = ", ".join(p for p in (workshop, vendor_city, vendor_state, "Nigeria") if p)
+
+    dest_state = normalize_state(address.state) or 'Lagos'
+    street = address.street_address
+    if address.landmark:
+        street = f"{street} (Near {address.landmark})"
+    dest_addr = f"{street}, {address.city}, {dest_state}, Nigeria"
+    is_interstate = not same_state(dest_state, vendor_state)
+    eta = "Interstate delivery (2 to 3 days)" if is_interstate else "Same-day or next-day delivery"
+
+    def result(fee_kobo, live, carrier="Dellyman Logistics", message=None):
+        out = {
+            'has_live_quote': live,
+            'delivery_fee_kobo': fee_kobo,
+            'delivery_fee_naira': round(fee_kobo / 100, 2) if fee_kobo else None,
+            'eta': eta,
+            'carrier': carrier,
+            'is_interstate': is_interstate,
+        }
+        if message:
+            out['message'] = message
+        return out
+
+    if dellyman_client.api_key:
+        try:
+            if is_interstate:
+                res = dellyman_client.get_interstate_quote(
+                    pickup_state=vendor_state, pickup_city=vendor_city, pickup_address=pickup_addr,
+                    delivery_state=dest_state, delivery_city=address.city or dest_state, delivery_address=dest_addr,
+                )
+                fare, carrier = res.get('TotalPrice') or res.get('PayableAmount'), res.get('Name')
+            else:
+                res = dellyman_client.get_quotes(pickup_address=pickup_addr, delivery_address=dest_addr)
+                companies = res.get('Companies') or []
+                fare = (companies[0].get('TotalPrice') or companies[0].get('PayableAmount')) if companies else None
+                carrier = companies[0].get('Name') if companies else None
+            if fare and float(fare) > 0:
+                return result(int(round(float(fare) * 100)), True, carrier or "Dellyman Logistics")
+        except Exception as exc:  # network / API errors fall through to the flat fee
+            logger.warning("Delivery quote failed: %s", exc)
+
+    flat = _flat_fee_kobo(is_interstate)
+    if flat:
+        return result(flat, False, message="Standard delivery fee.")
+    return result(0, False, message="Delivery is included. The courier is booked when your piece is ready.")
+
+
 def create_delivery_for_order(order, carrier_name: str = 'DELLYMAN', dispatch_notes: str = None) -> Delivery:
     """
     Automated Dellyman booking and digital package waybill generation when order is ready for pickup.
@@ -112,16 +181,25 @@ def create_delivery_for_order(order, carrier_name: str = 'DELLYMAN', dispatch_no
         delivery.dellyman_raw_response = booking_res
         delivery.save()
 
-    # Automatically notify Atelier Order Workspace Chat
+    if not dellyman_order_id:
+        # No rider was booked: tell the Aso team to book one by hand, never pretend otherwise.
+        from apps.common.notifications import send_manual_courier_request
+        send_manual_courier_request(order, pickup_address, pickup_phone, dest_address, dest_phone)
+
+    # Post the dispatch status into the order chat.
     try:
         from apps.orders.models import OrderMessage, MessageType
         track_display = dellyman_tracking_id or tracking_number
+        if dellyman_order_id:
+            content = f"Courier booked with Dellyman (tracking #{track_display}). A rider will come to the studio for pickup."
+        else:
+            content = "The piece is ready. The Aso team is booking a rider and will confirm the pickup time with the studio."
         OrderMessage.objects.create(
             order=order,
             sender=order.vendor.user,
             message_type=MessageType.SYSTEM_AUDIT,
-            content=f"Dellyman courier booking confirmed (Tracking #{track_display}). Dispatch rider summoned for studio pickup. Digital waybill generated.",
-            original_content=f"Dellyman booked: Tracking {track_display}"
+            content=content,
+            original_content=content,
         )
     except Exception as e:
         logger.warning(f"Failed to post system audit chat message: {e}")

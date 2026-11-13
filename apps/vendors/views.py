@@ -15,7 +15,7 @@ from .services import register_vendor_service, update_bank_account_service
 from .selectors import get_vendor_by_slug, get_vendor_bank_account
 from apps.common.permissions import IsVendorOwner, CanApplyAsVendor
 from apps.orders.serializers import VendorOrderSerializer
-from apps.orders.models import Order
+from apps.orders.models import Order, OrderStatus
 
 
 def _notify_if_newly_submitted(vendor, previous_submitted_at=None):
@@ -178,9 +178,10 @@ class VendorOrderListView(APIView):
     permission_classes = [IsVendorOwner]
 
     def get(self, request):
+        # Unpaid checkouts are not orders yet: a designer must never start sewing for one.
         orders = Order.objects.filter(
             vendor__user=request.user
-        ).select_related('vendor').prefetch_related('items', 'items__variant__product__media').order_by('-created_at')
+        ).exclude(order_status=OrderStatus.PENDING_PAYMENT).select_related('vendor').prefetch_related('items', 'items__variant__product__media').order_by('-created_at')
 
         serializer = VendorOrderSerializer(orders, many=True)
         return Response({
@@ -197,7 +198,9 @@ class VendorOrderDetailView(APIView):
 
     def get(self, request, order_id):
         try:
-            order = Order.objects.select_related('vendor').prefetch_related('items').get(
+            order = Order.objects.select_related('vendor').prefetch_related('items').exclude(
+                order_status=OrderStatus.PENDING_PAYMENT
+            ).get(
                 id=order_id,
                 vendor__user=request.user
             )
@@ -261,7 +264,7 @@ class VendorProfileMeView(APIView):
                     }, status=status.HTTP_400_BAD_REQUEST)
             store_name = data.get('store_name') or f"{user.first_name or 'Artisan'} Atelier"
             city = data.get('city') or 'Lagos'
-            state = data.get('state') or 'Lagos State'
+            state = data.get('state') or 'Lagos'
             vendor = register_vendor_service(
                 user=user,
                 store_name=store_name,

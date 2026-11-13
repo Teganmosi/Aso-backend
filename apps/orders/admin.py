@@ -77,7 +77,7 @@ class OrderAdmin(admin.ModelAdmin):
             count += 1
         self.message_user(request, f"{count} order(s) completed and funds released.")
 
-    @admin.action(description="Cancel and release pending earnings for selected orders")
+    @admin.action(description="Cancel selected orders and stop the designer payment (then refund the shopper in the Paystack dashboard)")
     def cancel_and_refund_order(self, request, queryset):
         from apps.orders.models import OrderStatus
         from apps.payouts.services import reverse_pending_earning
@@ -85,11 +85,11 @@ class OrderAdmin(admin.ModelAdmin):
         for order in queryset:
             if order.order_status not in [OrderStatus.CANCELLED, OrderStatus.REFUNDED, OrderStatus.COMPLETED]:
                 order.order_status = OrderStatus.CANCELLED
-                order.cancellation_reason = "Admin cancelled / dispute refunded"
+                order.cancellation_reason = "Cancelled by Aso"
                 order.save(update_fields=['order_status', 'cancellation_reason', 'updated_at'])
                 reverse_pending_earning(order)
                 count += 1
-        self.message_user(request, f"{count} order(s) cancelled.")
+        self.message_user(request, f"{count} order(s) cancelled. Remember to refund each shopper in the Paystack dashboard.")
 
 
 @admin.register(OrderItem)

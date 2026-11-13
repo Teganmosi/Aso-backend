@@ -200,9 +200,10 @@ def complete_order(order: Order) -> Order:
 def process_completed_orders() -> int:
     """
     Runs completion logic for all orders in DELIVERED status whose delivery was completed
-    at least 72 hours ago.
+    at least DISPUTE_WINDOW_HOURS (48) ago, i.e. once the shopper's window to report a problem has closed.
     """
-    cutoff = timezone.now() - timedelta(hours=72)
+    from django.conf import settings
+    cutoff = timezone.now() - timedelta(hours=getattr(settings, 'DISPUTE_WINDOW_HOURS', 48))
     
     delivered_orders = list(
         Order.objects.filter(

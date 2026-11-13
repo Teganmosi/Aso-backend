@@ -555,3 +555,45 @@ class SecurityTests(ProductsQABase):
         res_with_csrf = csrf_client.post(self.products_url, payload, format='json',
                                          HTTP_X_CSRFTOKEN=csrf_client.cookies['csrftoken'].value)
         self.assertEqual(res_with_csrf.status_code, status.HTTP_201_CREATED)
+
+
+class ReviewNotificationTests(TestCase):
+    """Designers hear back when a piece is approved or needs changes, and a fixed piece returns to review."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from apps.vendors.models import VendorProfile, VendorStatus
+        from apps.products.models import Category
+        U = get_user_model()
+        self.staff = U.objects.create_superuser(email='staff@aso.test', password='Password123!')
+        owner = U.objects.create_user(email='maker@aso.test', password='Password123!')
+        self.vendor = VendorProfile.objects.create(user=owner, store_name='Maker', city='Ikeja', state='Lagos',
+                                                   status=VendorStatus.APPROVED)
+        self.owner = owner
+        self.category = Category.objects.create(name='Review Cat', description='c')
+
+    def _product(self, approval):
+        from apps.products.models import Product, ProductStatus
+        return Product.objects.create(vendor=self.vendor, category=self.category, title='Kaftan', description='d',
+                                      base_price_kobo=100000, approval_status=approval, status=ProductStatus.PUBLISHED)
+
+    def test_approve_action_emails_designer(self):
+        from django.core import mail
+        from django.test import override_settings
+        from apps.products.models import ApprovalStatus
+        product = self._product(ApprovalStatus.PENDING)
+        self.client.force_login(self.staff)
+        with override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'):
+            self.client.post('/admin/products/product/', {'action': 'approve_selected_products',
+                                                          '_selected_action': [str(product.id)]})
+            self.assertEqual(len(mail.outbox), 1)
+            self.assertIn('live', mail.outbox[0].subject)
+            self.assertEqual(mail.outbox[0].to, ['maker@aso.test'])
+
+    def test_rejected_piece_returns_to_review_on_any_save(self):
+        from apps.products.models import ApprovalStatus
+        from apps.products.services import update_product
+        product = self._product(ApprovalStatus.REJECTED)
+        update_product(product, {})
+        product.refresh_from_db()
+        self.assertEqual(product.approval_status, ApprovalStatus.PENDING)

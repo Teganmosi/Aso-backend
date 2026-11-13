@@ -6,7 +6,7 @@ from rest_framework.exceptions import ValidationError
 from apps.cart.models import Cart
 from apps.products.models import ProductVariant
 from apps.orders.models import Order, OrderItem, OrderStatus
-from apps.deliveries.services import create_delivery_for_order
+from apps.deliveries.services import create_delivery_for_order, quote_delivery
 
 
 def create_order_from_cart(user, address) -> Order:
@@ -14,6 +14,11 @@ def create_order_from_cart(user, address) -> Order:
     Creates an Order from customer's active cart with pessimistic inventory locking (select_for_update).
     Snapshots shipping address and variant pricing, sets 30m expiration timer, and clears cart.
     """
+    # Quote delivery before taking row locks: it may call the courier API (up to 10 s).
+    pre_cart = Cart.objects.select_related('vendor').filter(user=user).first()
+    delivery_fee_kobo = (quote_delivery(address, pre_cart.vendor)['delivery_fee_kobo']
+                         if pre_cart and pre_cart.vendor else 0)
+
     with transaction.atomic():
         try:
             cart = Cart.objects.select_for_update(of=('self',)).select_related('vendor').get(user=user)
@@ -62,7 +67,8 @@ def create_order_from_cart(user, address) -> Order:
             variant.save(update_fields=['stock_quantity', 'updated_at'])
 
         subtotal_kobo = sum(item.total_price_kobo for item in cart_items)
-        delivery_fee_kobo = 0  # Can be dynamically computed in future sprints
+        if pre_cart is None or cart.vendor_id != pre_cart.vendor_id:
+            delivery_fee_kobo = quote_delivery(address, cart.vendor)['delivery_fee_kobo']
         total_amount_kobo = subtotal_kobo + delivery_fee_kobo
 
         # Generate unique order number (e.g. ASO-20260816-A1B2C3)

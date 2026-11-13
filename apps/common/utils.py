@@ -23,6 +23,28 @@ def kobo_to_naira(kobo_value: int) -> Decimal:
     return (Decimal(kobo_value) / Decimal(100)).quantize(Decimal('0.01'))
 
 
+def _first_error_message(data, field=None) -> str:
+    """
+    Turns DRF validation output into one sentence a shopper or designer can act on,
+    e.g. {'email': ['user with this email already exists.']} -> 'Email: user with this email already exists.'
+    """
+    if isinstance(data, dict):
+        for key, value in data.items():
+            nested_field = field if key in ('non_field_errors', '__all__') else key
+            return _first_error_message(value, nested_field)
+    elif isinstance(data, (list, tuple)):
+        for item in data:
+            if item:
+                return _first_error_message(item, field)
+    elif data:
+        text = str(data)
+        if field:
+            label = field.replace('_', ' ').strip().capitalize()
+            return f'{label}: {text}'
+        return text
+    return 'Please check the details you entered.'
+
+
 def custom_exception_handler(exc, context):
     """
     Custom DRF exception handler providing standardized error responses across all endpoints.
@@ -47,10 +69,10 @@ def custom_exception_handler(exc, context):
                 message = str(response.data['detail'])
                 details = response.data
             else:
-                message = 'Validation failed.'
+                message = _first_error_message(response.data)
                 details = response.data
         elif isinstance(response.data, list):
-            message = 'Validation failed.'
+            message = _first_error_message(response.data)
             details = {'errors': response.data}
         else:
             details = response.data

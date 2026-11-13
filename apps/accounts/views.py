@@ -1,4 +1,9 @@
 from django.contrib.auth import login, logout
+from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
+from django.core.exceptions import ValidationError
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_protect
@@ -12,7 +17,9 @@ from .serializers import (
 )
 from .services import create_user_service, create_address_service
 from .selectors import get_user_addresses
-from .models import Address, CustomerProfile
+from .models import Address, CustomerProfile, User
+from .throttles import LoginThrottle, PasswordResetThrottle, RegisterThrottle
+from apps.common.notifications import send_password_reset_email
 
 
 class CSRFTokenView(APIView):
@@ -35,6 +42,7 @@ class RegisterView(APIView):
     Registers a new user account, creates CustomerProfile, and authenticates via Session cookie.
     """
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [RegisterThrottle]
 
     @method_decorator(csrf_protect)
     def post(self, request):
@@ -56,6 +64,7 @@ class LoginView(APIView):
     Authenticates user credentials and establishes an HttpOnly Session cookie.
     """
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [LoginThrottle]
 
     @method_decorator(csrf_protect)
     def post(self, request):
@@ -182,3 +191,60 @@ class UserMeasurementsView(APIView):
             'message': 'My Aso Fit measurements saved successfully.',
             'saved_measurements': profile.saved_measurements
         }, status=status.HTTP_200_OK)
+
+
+class PasswordResetRequestView(APIView):
+    """
+    POST {email}. Emails a one-time link to choose a new password.
+    Always answers the same way so it can't be used to discover who has an account.
+    """
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [PasswordResetThrottle]
+
+    def post(self, request):
+        email = str(request.data.get('email', '')).strip().lower()
+        if email:
+            user = User.objects.filter(email__iexact=email, is_active=True).first()
+            if user and user.has_usable_password():
+                send_password_reset_email(user)
+        return Response({
+            'success': True,
+            'message': 'If that email has an Aso account, we’ve sent a link to reset your password. It works for 2 hours.'
+        })
+
+
+class PasswordResetConfirmView(APIView):
+    """POST {uid, token, new_password}. Sets the new password and signs the user out everywhere."""
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [PasswordResetThrottle]
+
+    def post(self, request):
+        uid = str(request.data.get('uid', ''))
+        token = str(request.data.get('token', ''))
+        new_password = str(request.data.get('new_password', ''))
+        invalid = Response({'success': False, 'error': {
+            'code': 'invalid_reset_link',
+            'message': 'This reset link is invalid or has expired. Please request a new one.',
+        }}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(pk=force_str(urlsafe_base64_decode(uid)), is_active=True)
+        except (User.DoesNotExist, ValueError, TypeError, OverflowError, ValidationError):
+            return invalid
+        if not default_token_generator.check_token(user, token):
+            return invalid
+
+        if len(new_password) < 8:
+            return Response({'success': False, 'error': {
+                'code': 'weak_password', 'message': 'Your new password must be at least 8 characters.',
+            }}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_password(new_password, user)
+        except ValidationError as exc:
+            return Response({'success': False, 'error': {
+                'code': 'weak_password', 'message': ' '.join(exc.messages),
+            }}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)  # also invalidates this token and other sessions' auth hash
+        user.save(update_fields=['password'])
+        return Response({'success': True, 'message': 'Your password has been changed. You can sign in now.'})

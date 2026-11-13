@@ -7,11 +7,20 @@ class DeliverySerializer(serializers.ModelSerializer):
     Read serializer for delivery tracking details.
     """
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    # False when the courier API could not book a rider (e.g. no Dellyman key): the Aso team
+    # books one by hand, and the studio must not be told a rider is on the way.
+    courier_booked = serializers.SerializerMethodField()
+    has_waybill = serializers.SerializerMethodField()
 
     class Meta:
         model = Delivery
         fields = [
             'id',
+            'courier_booked',
+            'has_waybill',
+            'dellyman_tracking_id',
+            'rider_name',
+            'rider_phone',
             'tracking_number',
             'carrier_name',
             'status',
@@ -24,6 +33,12 @@ class DeliverySerializer(serializers.ModelSerializer):
             'updated_at'
         ]
         read_only_fields = fields
+
+    def get_courier_booked(self, obj) -> bool:
+        return bool(obj.dellyman_order_id)
+
+    def get_has_waybill(self, obj) -> bool:
+        return bool(obj.package_label_base64)
 
 
 class DeliveryStatusUpdateSerializer(serializers.Serializer):

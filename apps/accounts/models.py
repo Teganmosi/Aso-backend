@@ -96,6 +96,8 @@ class Address(UUIDModel):
         return f"{self.full_name} - {self.city}, {self.state}"
 
     def save(self, *args, **kwargs):
+        from apps.common.nigeria import normalize_state
+        self.state = normalize_state(self.state)
         if self.is_default:
             # Clear default flag on other user addresses
             Address.objects.filter(user=self.user, is_default=True).exclude(id=self.id).update(is_default=False)

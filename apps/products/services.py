@@ -104,7 +104,9 @@ def update_product(product: Product, validated_data: dict) -> Product:
     for attr, value in validated_data.items():
         setattr(product, attr, value)
 
-    if requires_reapproval:
+    # A piece sent back for changes returns to the review queue whenever the designer saves it,
+    # whatever they changed (often only the photos or category).
+    if requires_reapproval or product.approval_status == ApprovalStatus.REJECTED:
         product.approval_status = ApprovalStatus.PENDING
 
     product.save()
