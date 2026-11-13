@@ -28,18 +28,16 @@ def get_category_by_slug(slug: str) -> Category:
 
 def _public_product_qs():
     """
-    Base queryset for products visible on the public marketplace:
-    - Published products (status == PUBLISHED, is_active == True)
-    - Vendor not SUSPENDED
-    - approval_status not REJECTED
+    Base queryset for products visible on the public marketplace. All of:
+    - approval_status == APPROVED (PENDING and REJECTED stay hidden; QA-39)
+    - status == PUBLISHED and is_active
+    - the designer's studio is APPROVED (not pending, rejected or suspended)
     """
     return Product.objects.filter(
+        approval_status=ApprovalStatus.APPROVED,
         status=ProductStatus.PUBLISHED,
-        is_active=True
-    ).exclude(
-        vendor__status=VendorStatus.SUSPENDED
-    ).exclude(
-        approval_status=ApprovalStatus.REJECTED
+        is_active=True,
+        vendor__status=VendorStatus.APPROVED,
     ).select_related('vendor', 'category').prefetch_related('media', 'variants')
 
 
