@@ -40,6 +40,9 @@ class User(AbstractUser):
     phone_number = models.CharField(max_length=20, unique=True, null=True, blank=True)
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150)
+    # Set when the user proves they own the inbox (6-digit code, or a password-reset link).
+    # Checkout and opening a designer studio require it (settings.REQUIRE_EMAIL_VERIFICATION).
+    email_verified_at = models.DateTimeField(null=True, blank=True)
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -58,6 +61,29 @@ class User(AbstractUser):
     @property
     def created_at(self):
         return self.date_joined
+
+    @property
+    def email_verified(self) -> bool:
+        return self.email_verified_at is not None
+
+
+class EmailVerificationCode(TimeStampedModel):
+    """
+    The current 6-digit sign-up code for a user. Only a keyed hash is stored, so a
+    database leak doesn't reveal live codes. One row per user; sending a new code
+    replaces the old one.
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='email_verification_code')
+    code_hash = models.CharField(max_length=128)
+    expires_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    sent_at = models.DateTimeField()
+
+    class Meta:
+        db_table = 'accounts_emailverificationcode'
+
+    def __str__(self):
+        return f"Email code for {self.user.email}"
 
 
 class CustomerProfile(UUIDModel):

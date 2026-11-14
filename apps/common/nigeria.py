@@ -35,3 +35,31 @@ def normalize_state(value) -> str:
 
 def same_state(a, b) -> bool:
     return normalize_state(a).lower() == normalize_state(b).lower()
+
+
+def normalize_phone(value) -> str | None:
+    """
+    One format per Nigerian mobile number: '+234XXXXXXXXXX'.
+
+    Accepts '08012345678', '8012345678', '2348012345678', '+234 801 234 5678',
+    '0801-234-5678'. Returns None when the value isn't a Nigerian mobile number,
+    so callers can reject it. Without this, '0801…' and '+234801…' were two
+    different "unique" numbers on two accounts.
+    """
+    digits = ''.join(ch for ch in str(value or '') if ch.isdigit())
+    if digits.startswith('234') and len(digits) > 11:
+        digits = digits[3:]
+    if digits.startswith('0'):
+        digits = digits[1:]
+    # Nigerian mobile numbers: 10 digits after the country code, starting 7, 8 or 9.
+    if len(digits) != 10 or digits[0] not in '789':
+        return None
+    return f'+234{digits}'
+
+
+def phone_variants(value) -> list[str]:
+    """Stored forms the same number may already have (from before normalisation)."""
+    normalized = normalize_phone(value)
+    if not normalized:
+        return [str(value or '').strip()]
+    return [normalized, '0' + normalized[4:], normalized[1:], normalized[4:]]

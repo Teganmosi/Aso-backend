@@ -301,6 +301,9 @@ EMAIL_BACKEND = (
 )
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Aso Marketplace <hello@asomarketplace.com.ng>')
 PASSWORD_RESET_TIMEOUT = 60 * 60 * 2  # reset links work for 2 hours
+# AUTH-02: checkout and opening a designer studio need a confirmed email (6-digit code).
+# Kill switch: set REQUIRE_EMAIL_VERIFICATION=False in Portainer if email sending is down.
+REQUIRE_EMAIL_VERIFICATION = os.environ.get('REQUIRE_EMAIL_VERIFICATION', 'True') == 'True'
 
 # Delivery fee charged at checkout when there is no live Dellyman quote (e.g. no API key yet).
 # 0 = delivery included for the shopper; Aso pays the courier.

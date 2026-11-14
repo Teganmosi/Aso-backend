@@ -1,18 +1,46 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from apps.common.nigeria import normalize_phone, phone_variants
 from .models import User, CustomerProfile, Address
+
+
+PHONE_FORMAT_MESSAGE = 'Enter a Nigerian mobile number, e.g. 08012345678.'
+
+
+def clean_phone(value, exclude_user=None):
+    """Normalises to +234…, rejects non-Nigerian numbers and numbers already on another account."""
+    value = str(value or '').strip()
+    if not value:
+        return ''
+    normalized = normalize_phone(value)
+    if not normalized:
+        raise serializers.ValidationError(PHONE_FORMAT_MESSAGE)
+    taken = User.objects.filter(phone_number__in=phone_variants(normalized))
+    if exclude_user is not None:
+        taken = taken.exclude(pk=exclude_user.pk)
+    if taken.exists():
+        raise serializers.ValidationError('This phone number is already on another Aso account.')
+    return normalized
+
 
 class UserSerializer(serializers.ModelSerializer):
     is_vendor = serializers.SerializerMethodField()
     vendor_profile = serializers.SerializerMethodField()
+    email_verified = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'first_name', 'last_name', 'phone_number',
+            'id', 'email', 'email_verified', 'first_name', 'last_name', 'phone_number',
             'is_staff', 'is_vendor', 'vendor_profile', 'saved_measurements', 'created_at', 'date_joined'
         ]
         read_only_fields = ['id', 'email', 'is_staff', 'created_at', 'date_joined']
+
+    def get_email_verified(self, obj) -> bool:
+        from .verification import verification_required
+        return obj.email_verified or not verification_required()
 
     saved_measurements = serializers.SerializerMethodField()
 
@@ -53,13 +81,24 @@ class RegisterSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("A user with this email address already exists.")
+            raise serializers.ValidationError(
+                "An account with this email already exists. Sign in, or use “Forgot password?”."
+            )
         return value.lower()
 
     def validate_phone_number(self, value):
-        if value and User.objects.filter(phone_number=value).exists():
-            raise serializers.ValidationError("A user with this phone number already exists.")
-        return value
+        return clean_phone(value)
+
+    def validate(self, data):
+        # Same rules as a password reset (not just "8 characters"): rejects "password123",
+        # all-digit passwords and ones too close to the person's name or email.
+        candidate = User(email=data.get('email', ''), first_name=data.get('first_name', ''),
+                         last_name=data.get('last_name', ''))
+        try:
+            validate_password(data.get('password', ''), candidate)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({'password': list(exc.messages)})
+        return data
 
 
 class LoginSerializer(serializers.Serializer):
@@ -75,9 +114,9 @@ class LoginSerializer(serializers.Serializer):
 
         user = authenticate(username=email, password=password)
         if not user:
-            raise serializers.ValidationError("Invalid email or password.")
+            raise serializers.ValidationError("That email and password don’t match. Check them, or use “Forgot password?”.")
         if not user.is_active:
-            raise serializers.ValidationError("User account is disabled.")
+            raise serializers.ValidationError("This account has been switched off. Contact support@asomarketplace.com.ng.")
 
         data['user'] = user
         return data

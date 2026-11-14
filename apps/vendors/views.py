@@ -33,6 +33,11 @@ class VendorRegisterView(APIView):
     permission_classes = [CanApplyAsVendor]
 
     def post(self, request):
+        from apps.accounts.verification import email_not_verified_response
+        blocked = email_not_verified_response(request.user, 'open your studio')
+        if blocked:
+            return blocked
+
         serializer = VendorRegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
