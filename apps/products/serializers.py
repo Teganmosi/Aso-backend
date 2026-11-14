@@ -345,6 +345,16 @@ class ProductListSerializer(serializers.ModelSerializer):
         })
 
 
+class VendorProductListSerializer(ProductListSerializer):
+    """
+    The designer's own list. Adds the reviewer's note, so a piece marked "Changes requested"
+    says what to change in the studio (it was only in the email before).
+    """
+
+    class Meta(ProductListSerializer.Meta):
+        fields = ProductListSerializer.Meta.fields + ['rejection_reason']
+
+
 class ProductDetailSerializer(serializers.ModelSerializer):
     """
     Detailed product serializer including media gallery, variant availability matrix, and Temu-style size chart.
