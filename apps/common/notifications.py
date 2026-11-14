@@ -218,6 +218,23 @@ def send_password_reset_email(user) -> bool:
     return send_transactional_email("Reset your Aso password", html_content, [user.email])
 
 
+def send_email_verification_code(user, code: str, minutes: int = 15) -> bool:
+    """The 6-digit sign-up code. The code is in the subject too, so it shows in phone notifications."""
+    name = user.first_name or 'there'
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #111827;">Confirm your email</h2>
+        <p>Hi {name},</p>
+        <p>Welcome to Aso. Enter this code to confirm your email address:</p>
+        <p style="margin: 24px 0; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #064E3B;">{code}</p>
+        <p>It works for {minutes} minutes. If you didn't create an Aso account, you can ignore this email.</p>
+        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
+        <p style="color: #6B7280; font-size: 12px;">Aso Marketplace</p>
+    </div>
+    """
+    return send_transactional_email(f"{code} is your Aso code", html_content, [user.email])
+
+
 def send_product_review_notification(product, approved: bool) -> bool:
     """Tells the designer their piece is live, or what to change before it can go live."""
     vendor = product.vendor

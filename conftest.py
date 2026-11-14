@@ -21,7 +21,9 @@ TEST_CACHES = {
 
 @pytest.fixture(autouse=True, scope='session')
 def _in_memory_test_cache():
-    with override_settings(CACHES=TEST_CACHES):
+    # REQUIRE_EMAIL_VERIFICATION is off for the suite: most tests create users
+    # directly and go to checkout. tests/test_email_verification.py turns it on.
+    with override_settings(CACHES=TEST_CACHES, REQUIRE_EMAIL_VERIFICATION=False):
         yield
 
 

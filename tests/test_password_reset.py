@@ -70,11 +70,13 @@ class ReadableErrorTests(TestCase):
             'email': 'taken@aso.test', 'password': 'Password123!', 'first_name': 'A', 'last_name': 'B',
         }, format='json')
         self.assertEqual(res.status_code, 400)
-        self.assertEqual(res.data['error']['message'], 'Email: A user with this email address already exists.')
+        self.assertEqual(res.data['error']['message'],
+                         'Email: An account with this email already exists. Sign in, or use “Forgot password?”.')
 
     def test_wrong_password_message(self):
         res = APIClient().post('/api/v1/auth/login/', {'email': 'x@aso.test', 'password': 'wrong'}, format='json')
-        self.assertEqual(res.data['error']['message'], 'Invalid email or password.')
+        self.assertEqual(res.data['error']['message'],
+                         'That email and password don’t match. Check them, or use “Forgot password?”.')
 
 
 class LoginRateLimitTests(TestCase):

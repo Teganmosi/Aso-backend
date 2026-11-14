@@ -22,6 +22,18 @@ class RegisterThrottle(LoginThrottle):
     rate = '20/hour'
 
 
+class VerifyEmailThrottle(LoginThrottle):
+    """Guessing a 6-digit code: each code also locks after 5 wrong tries."""
+    scope = 'verify_email'
+    rate = '30/hour'
+
+
+class ResendCodeThrottle(LoginThrottle):
+    """Each send costs email quota (Resend free plan: 100/day)."""
+    scope = 'resend_code'
+    rate = '8/hour'
+
+
 class PasswordResetThrottle(LoginThrottle):
     """Reset emails cost money and can be used to spam someone's inbox."""
     scope = 'password_reset'

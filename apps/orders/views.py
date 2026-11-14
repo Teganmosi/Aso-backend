@@ -39,6 +39,11 @@ class OrderListCreateView(APIView):
         }, status=status.HTTP_200_OK)
 
     def post(self, request):
+        from apps.accounts.verification import email_not_verified_response
+        blocked = email_not_verified_response(request.user, 'place an order')
+        if blocked:
+            return blocked
+
         serializer = OrderCreateSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
 

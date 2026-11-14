@@ -18,7 +18,10 @@ from .serializers import (
 from .services import create_user_service, create_address_service
 from .selectors import get_user_addresses
 from .models import Address, CustomerProfile, User
-from .throttles import LoginThrottle, PasswordResetThrottle, RegisterThrottle
+from .throttles import (
+    LoginThrottle, PasswordResetThrottle, RegisterThrottle, ResendCodeThrottle, VerifyEmailThrottle,
+)
+from . import verification
 from apps.common.notifications import send_password_reset_email
 
 
@@ -52,11 +55,55 @@ class RegisterView(APIView):
         user = create_user_service(**serializer.validated_data)
         login(request, user)
 
+        verification_sent = False
+        if verification.verification_required():
+            verification_sent = verification.send_code(user)['sent']
+
         return Response({
             'success': True,
-            'message': 'Registration successful.',
+            'message': 'Your account is ready.',
+            'verification_sent': verification_sent,
             'user': UserSerializer(user).data
         }, status=status.HTTP_201_CREATED)
+
+
+class VerifyEmailView(APIView):
+    """POST {code}. Confirms the signed-in user's email with the 6-digit code we sent."""
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [VerifyEmailThrottle]
+
+    def post(self, request):
+        ok, error_code, message = verification.check_code(request.user, request.data.get('code', ''))
+        if not ok:
+            return Response({'success': False, 'error': {'code': error_code, 'message': message}},
+                            status=status.HTTP_400_BAD_REQUEST)
+        return Response({'success': True, 'message': message, 'user': UserSerializer(request.user).data})
+
+
+class ResendVerificationView(APIView):
+    """POST. Emails a new code (at most once a minute)."""
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ResendCodeThrottle]
+
+    def post(self, request):
+        result = verification.send_code(request.user)
+        if result.get('already_verified'):
+            return Response({'success': True, 'message': 'Your email is already confirmed.', 'retry_after': 0})
+        if not result['sent'] and result['retry_after']:
+            return Response({
+                'success': False,
+                'error': {'code': 'wait', 'message': f'Please wait {result["retry_after"]} seconds before asking for another code.'},
+                'retry_after': result['retry_after'],
+            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        if not result['sent']:
+            return Response({'success': False, 'error': {
+                'code': 'email_failed', 'message': 'We couldn’t send the email just now. Please try again in a minute.',
+            }}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response({
+            'success': True,
+            'message': f'We sent a new code to {request.user.email}.',
+            'retry_after': result['retry_after'],
+        })
 
 
 class LoginView(APIView):
@@ -111,7 +158,8 @@ class MeView(APIView):
         })
 
     def patch(self, request):
-        from .models import User
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+        from .serializers import clean_phone
         user = request.user
         data = request.data
 
@@ -120,13 +168,13 @@ class MeView(APIView):
         if 'last_name' in data:
             user.last_name = str(data['last_name']).strip()
         if 'phone_number' in data:
-            phone = str(data['phone_number']).strip()
-            if phone and User.objects.filter(phone_number=phone).exclude(id=user.id).exists():
-                return Response(
-                    {'detail': 'This phone number is already registered to another account.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            user.phone_number = phone
+            try:
+                phone = clean_phone(data['phone_number'], exclude_user=user)
+            except DRFValidationError as exc:
+                return Response({'success': False, 'error': {
+                    'code': 'invalid_phone', 'message': str(exc.detail[0]),
+                }}, status=status.HTTP_400_BAD_REQUEST)
+            user.phone_number = phone or None
 
         user.save()
         return Response({
@@ -247,4 +295,6 @@ class PasswordResetConfirmView(APIView):
 
         user.set_password(new_password)  # also invalidates this token and other sessions' auth hash
         user.save(update_fields=['password'])
+        # Opening the emailed link proves they own the inbox.
+        verification.mark_verified(user)
         return Response({'success': True, 'message': 'Your password has been changed. You can sign in now.'})
