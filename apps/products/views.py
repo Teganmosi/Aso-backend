@@ -10,6 +10,7 @@ from apps.products.serializers import (
     CategorySerializer,
     ProductCreateUpdateSerializer,
     ProductListSerializer,
+    VendorProductListSerializer,
     ProductDetailSerializer,
     ProductVariantSerializer,
     ProductMediaSerializer,
@@ -212,7 +213,7 @@ class VendorProductListCreateView(APIView):
 
     def get(self, request):
         products = get_vendor_products(request.user.vendor_profile)
-        serializer = ProductListSerializer(products, many=True)
+        serializer = VendorProductListSerializer(products, many=True)
         return Response({
             'success': True,
             'products': serializer.data

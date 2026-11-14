@@ -368,6 +368,19 @@ class VisibilityMatrixTests(ProductsQABase):
         self.assertEqual(len(res.data['products']), 1)
         self.assertEqual(res.data['products'][0]['title'], 'My Pending Draft')
 
+    def test_owner_list_says_what_to_change_but_public_list_does_not(self):
+        product = self.make_product(title='Needs Back Photo', approval=ApprovalStatus.REJECTED)
+        product.rejection_reason = 'Add a photo of the back.'
+        product.save(update_fields=['rejection_reason'])
+        mine = self.vendor_client.get('/api/v1/vendor/products/').data['products']
+        self.assertEqual(mine[0]['rejection_reason'], 'Add a photo of the back.')
+        live = self.make_product(title='Live One')
+        public = APIClient().get(self.products_url).data
+        rows = public.get('results') or public.get('data') or public.get('products') or []
+        self.assertTrue(rows, public)
+        self.assertNotIn('rejection_reason', rows[0])
+        self.assertEqual(rows[0]['title'], live.title)
+
 
 class SearchFilterSortTests(ProductsQABase):
     def setUp(self):
