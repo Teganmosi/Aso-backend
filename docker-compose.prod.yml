@@ -12,6 +12,9 @@ services:
     container_name: aso_backend
     restart: always
     environment: &backend_env
+      # wsgi.py/manage.py default to config.settings.local, which hard-codes DEBUG=True and
+      # ALLOWED_HOSTS=['*']. Production must use base, which reads both from this environment.
+      - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE:-config.settings.base}
       - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in the Portainer stack environment}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-asomarketplace.com.ng,www.asomarketplace.com.ng,api.asomarketplace.com.ng,app-69-164-247-208.sslip.io,api-69-164-247-208.sslip.io,69.164.247.208,localhost,127.0.0.1,aso_backend}
