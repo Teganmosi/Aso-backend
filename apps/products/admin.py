@@ -1,12 +1,24 @@
 from apps.common.admin_display import badge, naira, thumb
 from apps.common.notifications import send_product_review_notification
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
 from django.db import models
+from django.template.response import TemplateResponse
 from django.utils.html import format_html_join
 from apps.products.models import Category, Product, ProductVariant, ProductMedia, Review, ApprovalStatus, ProductStatus
 from apps.products.services import invalidate_product_caches
 
+# Tap-to-use reasons on the "Take down" page (staff can edit or write their own).
+TAKE_DOWN_REASONS = [
+    'The photos are blurry or too dark. Please upload clearer ones in good light.',
+    'Please add a clear photo of the back of the outfit.',
+    'These photos look like stock or another designer’s images. Please use photos of your own work.',
+    'Please check the price. It looks wrong for this piece.',
+    'Please add detail to the description: fabric, lining and what is included.',
+    'This piece is out of stock. Update the sizes and stock, then save.',
+    'This item isn’t clothing or fashion, so it can’t be sold on Aso.',
+]
 
 
 class ProductVariantInline(admin.TabularInline):
@@ -52,7 +64,8 @@ class ProductAdmin(admin.ModelAdmin):
         'created_at'
     ]
     list_display_links = ['photo', 'title']
-    list_filter = ['approval_status', 'status', 'is_active', 'category', 'vendor']
+    list_filter = ['approval_status', 'status', 'created_at', 'is_active', 'category', 'vendor']
+    date_hierarchy = 'created_at'
     search_fields = ['title', 'slug', 'vendor__store_name', 'description']
     prepopulated_fields = {'slug': ('title',)}
     inlines = [ProductVariantInline, ProductMediaInline]
@@ -62,9 +75,10 @@ class ProductAdmin(admin.ModelAdmin):
     list_per_page = 40
     readonly_fields = ['photos_preview', 'price', 'average_rating', 'review_count']
     fieldsets = [
-        ('Review', {
-            'description': 'Check the photos, title, price and sizes. To ask for changes, choose '
-                           '"Rejected", write what to change, and save: the designer is emailed.',
+        ('In the shop', {
+            'description': 'Pieces go live as soon as the designer saves them. To take one down, set "Shop" '
+                           'to "Taken down", write why, and save: the designer is emailed, and the piece goes '
+                           'live again when they save a fix.',
             'fields': ['photos_preview', 'approval_status', 'rejection_reason', 'status', 'is_active'],
         }),
         ('The piece', {
@@ -106,37 +120,55 @@ class ProductAdmin(admin.ModelAdmin):
     def price(self, obj):
         return naira(obj.base_price_kobo)
 
-    @admin.display(description='Review', ordering='approval_status')
+    @admin.display(description='Shop', ordering='approval_status')
     def review_badge(self, obj):
-        label = {'PENDING': 'Waiting for review', 'APPROVED': 'Live', 'REJECTED': 'Changes requested'}
-        return badge(obj.approval_status, label.get(obj.approval_status))
+        if obj.approval_status == ApprovalStatus.APPROVED and obj.status != ProductStatus.PUBLISHED:
+            return badge('PENDING', 'Draft (designer)')
+        return badge(obj.approval_status, obj.get_approval_status_display())
 
-    @admin.action(description="Approve selected products and mark as PUBLISHED")
+    @admin.action(description="Put back live (designer is emailed)")
     def approve_selected_products(self, request, queryset):
-        newly_approved = list(queryset.exclude(approval_status=ApprovalStatus.APPROVED)
-                              .select_related('vendor__user'))
+        newly_live = list(queryset.exclude(approval_status=ApprovalStatus.APPROVED)
+                          .select_related('vendor__user'))
         updated_count = queryset.update(
             approval_status=ApprovalStatus.APPROVED,
             status=ProductStatus.PUBLISHED,
             rejection_reason=None
         )
-        invalidate_product_caches()  # show approved products publicly right away
-        for product in newly_approved:
+        invalidate_product_caches()  # show them publicly right away
+        for product in newly_live:
             send_product_review_notification(product, approved=True)
-        self.message_user(request, f"{updated_count} product(s) approved and published. "
-                                   f"{len(newly_approved)} designer email(s) sent.")
+        self.message_user(request, f"{updated_count} piece(s) live. {len(newly_live)} designer email(s) sent.")
 
-    @admin.action(description="Reject selected products")
+    @admin.action(description="Take down… (hide from shoppers, tell the designer why)")
     def reject_selected_products(self, request, queryset):
-        updated_count = queryset.update(
-            approval_status=ApprovalStatus.REJECTED
-        )
-        invalidate_product_caches()  # remove rejected products from public lists right away
-        self.message_user(
-            request,
-            f"{updated_count} product(s) rejected. Open each one and fill in “Rejection reason”: "
-            "the designer is emailed what to change when you save it.",
-        )
+        # Step 2: the confirmation page posted back with a reason.
+        if request.POST.get('take_down_confirmed'):
+            reason = ' '.join(str(request.POST.get('reason', '')).split())
+            if not reason:
+                self.message_user(request, 'Write why the piece is being taken down; nothing was changed.',
+                                  level=messages.ERROR)
+                return None
+            pieces = list(queryset.select_related('vendor__user'))
+            for product in pieces:
+                product.approval_status = ApprovalStatus.REJECTED
+                product.rejection_reason = reason
+                product.save(update_fields=['approval_status', 'rejection_reason', 'updated_at'])
+                send_product_review_notification(product, approved=False)
+            invalidate_product_caches()  # gone from the shop right away
+            self.message_user(request, f"{len(pieces)} piece(s) taken down. Each designer was emailed the reason; "
+                                       "a piece goes live again when they save a fix.")
+            return None
+        # Step 1: ask for the reason.
+        return TemplateResponse(request, 'admin/aso_take_down.html', {
+            **self.admin_site.each_context(request),
+            'title': 'Take down pieces',
+            'pieces': queryset.select_related('vendor'),
+            'selected': request.POST.getlist(ACTION_CHECKBOX_NAME),
+            'action': 'reject_selected_products',
+            'quick_reasons': TAKE_DOWN_REASONS,
+            'opts': self.model._meta,
+        })
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)

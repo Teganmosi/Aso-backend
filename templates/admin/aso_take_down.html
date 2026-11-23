@@ -1,0 +1,47 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">Home</a> ›
+  <a href="{% url 'admin:products_product_changelist' %}">Pieces</a> › Take down
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="aso-takedown">
+  <p>These piece{{ pieces|length|pluralize }} will be hidden from shoppers straight away. Each designer is emailed the
+     reason below, and a piece goes live again when its designer saves a fix.</p>
+
+  <ul class="aso-takedown__list">
+    {% for p in pieces %}<li><strong>{{ p.title }}</strong> · {{ p.vendor.store_name }}</li>{% endfor %}
+  </ul>
+
+  <form method="post">
+    {% csrf_token %}
+    {% for pk in selected %}<input type="hidden" name="_selected_action" value="{{ pk }}">{% endfor %}
+    <input type="hidden" name="action" value="{{ action }}">
+    <input type="hidden" name="take_down_confirmed" value="1">
+
+    <p class="aso-takedown__hint">Tap a reason or write your own:</p>
+    <div class="aso-takedown__chips">
+      {% for r in quick_reasons %}<button type="button" class="aso-chip" data-reason="{{ r }}">{{ r }}</button>{% endfor %}
+    </div>
+    <label for="td-reason" class="aso-takedown__label">Why is it being taken down? (the designer sees this)</label>
+    <textarea id="td-reason" name="reason" rows="4" required></textarea>
+
+    <div class="submit-row">
+      <input type="submit" class="default" value="Take down and email the designer{{ pieces|length|pluralize }}">
+      <a href="{% url 'admin:products_product_changelist' %}" class="button cancel-link">Cancel</a>
+    </div>
+  </form>
+</div>
+<script>
+  document.querySelectorAll('.aso-chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var box = document.getElementById('td-reason');
+      box.value = (box.value.trim() ? box.value.trim() + ' ' : '') + chip.dataset.reason;
+      box.focus();
+    });
+  });
+</script>
+{% endblock %}

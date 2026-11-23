@@ -163,3 +163,17 @@ td small, th small { color: var(--body-quiet-color); font-size: 11px; }
 #result_list .field-amount,
 #result_list .field-price { white-space: nowrap; }
 #result_list .field-title, #result_list .field-what { min-width: 160px; }
+
+/* "Take down" confirmation page */
+.aso-takedown { max-width: 760px; }
+.aso-takedown__list { margin: 10px 0 18px; padding-left: 18px; }
+.aso-takedown__hint { margin: 0 0 8px; color: var(--body-quiet-color); }
+.aso-takedown__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.aso-chip {
+  border: 1px solid var(--hairline-color); background: var(--darkened-bg); color: var(--body-fg);
+  border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer; text-align: left;
+}
+.aso-chip:hover { border-color: #B45309; }
+.aso-takedown__label { display: block; font-weight: 700; margin-bottom: 6px; }
+.aso-takedown textarea { width: 100%; box-sizing: border-box; border-radius: 8px; padding: 10px; font-size: 14px; }
+.aso-takedown .submit-row { margin-top: 14px; }

@@ -236,18 +236,19 @@ def send_email_verification_code(user, code: str, minutes: int = 15) -> bool:
 
 
 def send_product_review_notification(product, approved: bool) -> bool:
-    """Tells the designer their piece is live, or what to change before it can go live."""
+    """Tells the designer a piece Aso took down is back live, or why it was taken down and how to fix it."""
     vendor = product.vendor
     base = getattr(settings, 'FRONTEND_URL', 'https://asomarketplace.com.ng').rstrip('/')
     if approved:
-        subject = f"Your piece is live on Aso: {product.title}"
-        body = (f"<p>Good news: <strong>{product.title}</strong> has been approved and shoppers can now buy it.</p>"
+        subject = f"Your piece is live again: {product.title}"
+        body = (f"<p><strong>{product.title}</strong> is back on Aso and shoppers can buy it.</p>"
                 f"<p><a href=\"{base}/products/{product.slug}\">See it on Aso</a></p>")
     else:
-        subject = f"Changes needed: {product.title}"
-        body = (f"<p>We reviewed <strong>{product.title}</strong> and it needs a change before it can go live:</p>"
+        subject = f"We've paused a piece: {product.title}"
+        body = (f"<p>We've taken <strong>{product.title}</strong> off Aso for now, because:</p>"
                 f"<p style=\"background:#FEF3C7;padding:12px;border-radius:6px;\">{product.rejection_reason}</p>"
-                f"<p>Edit the piece in your <a href=\"{base}/vendor/products\">Designer Studio</a> and save it to send it back for review.</p>")
+                f"<p>Fix it in your <a href=\"{base}/vendor/products\">Designer Studio</a> and save. "
+                f"It goes live again straight away.</p>")
     html_content = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <p>Hello {vendor.store_name},</p>

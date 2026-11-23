@@ -57,9 +57,9 @@ class Category(UUIDModel):
 
 
 class ApprovalStatus(models.TextChoices):
-    PENDING = 'PENDING', 'Pending Approval'
-    APPROVED = 'APPROVED', 'Approved'
-    REJECTED = 'REJECTED', 'Rejected'
+    PENDING = 'PENDING', 'Waiting (old review step)'
+    APPROVED = 'APPROVED', 'Live'
+    REJECTED = 'REJECTED', 'Taken down'
 
 
 class ProductStatus(models.TextChoices):
@@ -95,7 +95,7 @@ class Product(UUIDModel):
     approval_status = models.CharField(
         max_length=20,
         choices=ApprovalStatus.choices,
-        default=ApprovalStatus.PENDING
+        default=ApprovalStatus.APPROVED,  # live on save; Aso can take a piece down
     )
     status = models.CharField(
         max_length=20,
@@ -103,7 +103,7 @@ class Product(UUIDModel):
         default=ProductStatus.DRAFT
     )
     is_active = models.BooleanField(default=True)
-    rejection_reason = models.TextField(null=True, blank=True)
+    rejection_reason = models.TextField(null=True, blank=True, verbose_name='Reason (emailed to the designer)')
 
     average_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
     review_count = models.PositiveIntegerField(default=0)

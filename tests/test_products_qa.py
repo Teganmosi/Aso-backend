@@ -91,56 +91,55 @@ class ProductsQABase(TestCase):
 class SprintGuideFlowTests(ProductsQABase):
     """End-to-end walkthrough exactly as written in sprint.md Sprint 3 guide."""
 
-    def test_full_create_approve_search_flow(self):
-        # Step 1: Approved vendor creates "Royal Silk Agbada" at 7,500,000 Kobo
+    def test_full_create_take_down_fix_flow(self):
+        from django.core import mail
+        from django.test import override_settings
+        # Step 1: designer creates a piece: it is live straight away
         res = self.create_via_api()
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(res.data['product']['approval_status'], 'PENDING')
-        self.assertEqual(res.data['product']['base_price_kobo'], 7500000)
+        self.assertEqual(res.data['product']['approval_status'], 'APPROVED')
         self.assertEqual(res.data['product']['base_price_naira'], 75000.0)
         slug = res.data['product']['slug']
+        self.assertEqual(APIClient().get(self.products_url + '?search=Agbada').data['count'], 1)
+        self.assertEqual(APIClient().get('/api/v1/products/%s/' % slug).status_code, status.HTTP_200_OK)
 
-        # Step 2: PENDING product is NOT visible to public customers
-        public_list = APIClient().get(self.products_url)
-        self.assertEqual(public_list.data['count'], 0)
-        self.assertEqual(APIClient().get(self.products_url + '?search=Agbada').data['count'], 0)
-        self.assertEqual(
-            APIClient().get('/api/v1/products/%s/' % slug).status_code,
-            status.HTTP_404_NOT_FOUND)
-
-        # Step 3: Admin approves via Django Admin bulk action
+        # Step 2: staff take it down: first a confirmation page asking why, nothing changes yet
         product = Product.objects.get(slug=slug)
         admin_client = self.make_admin_client()
-        action_res = admin_client.post(
-            '/admin/products/product/',
-            {'action': 'approve_selected_products', ACTION_CHECKBOX_NAME: [str(product.pk)]},
-        )
-        self.assertIn(action_res.status_code, (status.HTTP_200_OK, status.HTTP_302_FOUND))
+        page = admin_client.post('/admin/products/product/', {
+            'action': 'reject_selected_products', ACTION_CHECKBOX_NAME: [str(product.pk)]})
+        self.assertEqual(page.status_code, status.HTTP_200_OK)
+        self.assertContains(page, 'Why is it being taken down?')
         product.refresh_from_db()
         self.assertEqual(product.approval_status, ApprovalStatus.APPROVED)
-        self.assertEqual(product.status, ProductStatus.PUBLISHED)
 
-        # Step 4: Product now appears in public search
-        search = APIClient().get(self.products_url + '?search=Agbada')
-        self.assertEqual(search.status_code, status.HTTP_200_OK)
-        self.assertEqual(search.data['count'], 1)
-        self.assertEqual(search.data['products'][0]['title'], 'Royal Silk Agbada')
-
-        # Public detail resolves too
-        detail = APIClient().get('/api/v1/products/%s/' % slug)
-        self.assertEqual(detail.status_code, status.HTTP_200_OK)
-        self.assertEqual(detail.data['product']['title'], 'Royal Silk Agbada')
-
-    def test_admin_reject_action_hides_product_and_records_state(self):
-        product = self.make_product(approval=ApprovalStatus.PENDING, title='Rejected Gown')
-        admin_client = self.make_admin_client('qa.admin2@aso.test')
-        admin_client.post(
-            '/admin/products/product/',
-            {'action': 'reject_selected_products', ACTION_CHECKBOX_NAME: [str(product.pk)]},
-        )
+        # Step 3: confirm with a reason: hidden from shoppers and the designer is emailed
+        with override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'):
+            admin_client.post('/admin/products/product/', {
+                'action': 'reject_selected_products', ACTION_CHECKBOX_NAME: [str(product.pk)],
+                'take_down_confirmed': '1', 'reason': 'Blurry photos.'})
+            self.assertEqual(len(mail.outbox), 1)
+            self.assertIn('Blurry photos.', mail.outbox[0].alternatives[0][0])
         product.refresh_from_db()
         self.assertEqual(product.approval_status, ApprovalStatus.REJECTED)
-        self.assertEqual(APIClient().get(self.products_url).data['count'], 0)
+        self.assertEqual(APIClient().get(self.products_url + '?search=Agbada').data['count'], 0)
+
+        # Step 4: the designer saves a fix: live again, reason cleared
+        res = self.vendor_client.patch('/api/v1/vendor/products/%s/' % product.id,
+                                       {'description': 'Sharper photos attached'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['product']['approval_status'], 'APPROVED')
+        self.assertEqual(APIClient().get(self.products_url + '?search=Agbada').data['count'], 1)
+
+    def test_take_down_needs_a_reason(self):
+        product = self.make_product(title='Live Gown')
+        admin_client = self.make_admin_client('qa.admin2@aso.test')
+        admin_client.post('/admin/products/product/', {
+            'action': 'reject_selected_products', ACTION_CHECKBOX_NAME: [str(product.pk)],
+            'take_down_confirmed': '1', 'reason': '   '})
+        product.refresh_from_db()
+        self.assertEqual(product.approval_status, ApprovalStatus.APPROVED)
+        self.assertEqual(APIClient().get(self.products_url).data['count'], 1)
 
     def test_approve_action_clears_previous_rejection_reason(self):
         product = self.make_product(
@@ -313,10 +312,13 @@ class ValidationTests(ProductsQABase):
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_vendor_cannot_force_approval_status(self):
-        # approval_status is read-only: a vendor attempting APPROVED must still land in PENDING
-        res = self.create_via_api(title='Sneaky Approval', approval_status='APPROVED')
-        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(res.data['product']['approval_status'], 'PENDING')
+        # approval_status is read-only: a designer can't put a taken-down piece back by themselves
+        product = self.make_product(title='Taken Down', approval=ApprovalStatus.REJECTED)
+        res = self.vendor_client.patch('/api/v1/vendor/products/%s/' % product.id,
+                                       {'approval_status': 'REJECTED'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        # Saving counts as a fix, so it is live again; sending REJECTED is ignored.
+        self.assertEqual(res.data['product']['approval_status'], 'APPROVED')
 
     def test_duplicate_titles_allowed_with_suffixed_slugs(self):
         r1 = self.create_via_api(title='Signature Kaftan')
@@ -454,27 +456,25 @@ class VendorManagementTests(ProductsQABase):
         self.assertEqual(res.data['product']['approval_status'], 'APPROVED')
         self.assertEqual(APIClient().get(self.products_url).data['count'], 1)
 
-    def test_patch_core_field_resets_approval_and_hides_product(self):
+    def test_editing_a_live_piece_keeps_it_live(self):
         product = self.make_product(title='Edited Product')
-        self.assertEqual(APIClient().get(self.products_url).data['count'], 1)
-
         res = self.vendor_client.patch(
             '/api/v1/vendor/products/%s/' % product.id,
             {'base_price_kobo': 9999900}, format='json')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data['product']['approval_status'], 'PENDING')
+        self.assertEqual(res.data['product']['approval_status'], 'APPROVED')
+        self.assertEqual(APIClient().get(self.products_url).data['count'], 1)
 
-        # Now hidden from public until re-approved
-        self.assertEqual(APIClient().get(self.products_url).data['count'], 0)
-
-    def test_rejected_product_edit_returns_to_pending_review(self):
+    def test_taken_down_piece_goes_live_when_fixed(self):
         product = self.make_product(title='Fix And Resubmit', approval=ApprovalStatus.REJECTED,
-                                    prod_status=ProductStatus.DRAFT, rejection_reason='Bad photos')
+                                    rejection_reason='Bad photos')
         res = self.vendor_client.patch(
             '/api/v1/vendor/products/%s/' % product.id,
             {'description': 'New improved photos attached'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data['product']['approval_status'], 'PENDING')
+        self.assertEqual(res.data['product']['approval_status'], 'APPROVED')
+        product.refresh_from_db()
+        self.assertIsNone(product.rejection_reason)
 
     def test_vendor_product_lookup_by_id(self):
         product = self.make_product(title='Lookup Check')
@@ -594,7 +594,7 @@ class ReviewNotificationTests(TestCase):
         from django.core import mail
         from django.test import override_settings
         from apps.products.models import ApprovalStatus
-        product = self._product(ApprovalStatus.PENDING)
+        product = self._product(ApprovalStatus.REJECTED)
         self.client.force_login(self.staff)
         with override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'):
             self.client.post('/admin/products/product/', {'action': 'approve_selected_products',
@@ -603,10 +603,10 @@ class ReviewNotificationTests(TestCase):
             self.assertIn('live', mail.outbox[0].subject)
             self.assertEqual(mail.outbox[0].to, ['maker@aso.test'])
 
-    def test_rejected_piece_returns_to_review_on_any_save(self):
+    def test_taken_down_piece_goes_live_on_any_save(self):
         from apps.products.models import ApprovalStatus
         from apps.products.services import update_product
         product = self._product(ApprovalStatus.REJECTED)
         update_product(product, {})
         product.refresh_from_db()
-        self.assertEqual(product.approval_status, ApprovalStatus.PENDING)
+        self.assertEqual(product.approval_status, ApprovalStatus.APPROVED)

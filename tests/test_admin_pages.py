@@ -26,7 +26,7 @@ class AdminPagesTests(TestCase):
                                               bank_name='GTBank', bank_code='058')
         cat = Category.objects.create(name='Agbada', description='x')
         cls.product = Product.objects.create(vendor=cls.vendor, category=cat, title='Emerald Agbada', description='d',
-                                             base_price_kobo=18_500_000, approval_status=ApprovalStatus.PENDING,
+                                             base_price_kobo=18_500_000, approval_status=ApprovalStatus.APPROVED,
                                              status=ProductStatus.PUBLISHED)
         ProductMedia.objects.create(product=cls.product, url='/media/products/a.jpg', is_primary=True)
         variant = ProductVariant.objects.create(product=cls.product, size='L', sku='EA-L', stock_quantity=3)
@@ -57,9 +57,9 @@ class AdminPagesTests(TestCase):
         self.assertEqual(res.status_code, 200)
         html = res.content.decode()
         self.assertIn('Needs your attention', html)
-        self.assertIn('Pieces waiting for review', html)
+        self.assertIn('New pieces, last 24 hours', html)
         self.assertIn('₦100,000 in total', html)          # payouts waiting, in naira
-        self.assertIn('approval_status__exact=PENDING', html)
+        self.assertIn('created_at__gte=', html)                # links to today's new pieces
         self.assertIn('Aso Admin', html)
         self.assertIn('aso_admin/admin.css', html)
         self.assertIn('Designers', html)                   # plain section names
@@ -88,7 +88,7 @@ class AdminPagesTests(TestCase):
         self.assertIn('₦185,000', orders)
         self.assertIn('Emerald Agbada (L)', orders)
         products = self.client.get(reverse('admin:products_product_changelist')).content.decode()
-        self.assertIn('Waiting for review', products)
+        self.assertIn('Live', products)
         self.assertIn('/media/products/a.jpg', products)   # thumbnail
 
     def test_login_page_is_branded(self):

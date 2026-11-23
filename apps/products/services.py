@@ -19,10 +19,11 @@ def create_product(vendor_profile, validated_data: dict) -> Product:
     category = Category.objects.get(id=category_id)
 
     status = validated_data.pop('status', ProductStatus.PUBLISHED)
-    # Every new product waits for admin review (sprint plan A.9 / QA-48).
-    # Designers can never set their own approval status.
+    # Pieces go live as soon as the designer saves them (Nov 2026: no pre-approval).
+    # Aso checks after the fact and can take a piece down with a reason.
+    # Designers still can't set approval_status themselves.
     validated_data.pop('approval_status', None)
-    approval_status = ApprovalStatus.PENDING
+    approval_status = ApprovalStatus.APPROVED
     sizes = validated_data.pop('sizes', None)
     colors = validated_data.pop('colors', None)
     stock_qty = validated_data.pop('stock_quantity', 10) or 10
@@ -84,8 +85,9 @@ def create_product(vendor_profile, validated_data: dict) -> Product:
 @transaction.atomic
 def update_product(product: Product, validated_data: dict) -> Product:
     """
-    Updates an existing product.
-    Resets approval_status to PENDING if core details change.
+    Updates an existing product. Edits never take a live piece offline.
+    A piece Aso took down goes live again when the designer saves their fix
+    (Aso can take it down again if the problem remains).
     """
     if 'category_id' in validated_data:
         category_id = validated_data.pop('category_id')
@@ -94,20 +96,14 @@ def update_product(product: Product, validated_data: dict) -> Product:
     sizes = validated_data.pop('sizes', None)
     colors = validated_data.pop('colors', None)
     stock_qty = validated_data.pop('stock_quantity', None)
-
-    requires_reapproval = False
-    reapproval_fields = ['title', 'description', 'base_price_kobo']
-    for field in reapproval_fields:
-        if field in validated_data and getattr(product, field) != validated_data[field]:
-            requires_reapproval = True
+    validated_data.pop('approval_status', None)
 
     for attr, value in validated_data.items():
         setattr(product, attr, value)
 
-    # A piece sent back for changes returns to the review queue whenever the designer saves it,
-    # whatever they changed (often only the photos or category).
-    if requires_reapproval or product.approval_status == ApprovalStatus.REJECTED:
-        product.approval_status = ApprovalStatus.PENDING
+    if product.approval_status != ApprovalStatus.APPROVED:
+        product.approval_status = ApprovalStatus.APPROVED
+        product.rejection_reason = None
 
     product.save()
 

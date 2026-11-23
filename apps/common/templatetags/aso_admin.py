@@ -33,10 +33,11 @@ def aso_dashboard(context):
 
     tasks = [
         {
-            'label': 'Pieces waiting for review',
-            'hint': 'Designers expect an answer within a day.',
-            'count': Product.objects.filter(approval_status=ApprovalStatus.PENDING).count(),
-            'url': link(Product, 'approval_status__exact=PENDING'),
+            # Pieces go live without approval; this is the quick after-the-fact look.
+            'label': 'New pieces, last 24 hours',
+            'hint': 'Already live. Glance at them; take down anything that breaks the rules.',
+            'count': Product.objects.filter(created_at__gte=now - timedelta(hours=24)).count(),
+            'url': link(Product, f"created_at__gte={(timezone.localtime(now) - timedelta(days=1)).date().isoformat()}"),
         },
         {
             'label': 'New orders not accepted',

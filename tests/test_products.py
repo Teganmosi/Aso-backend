@@ -61,10 +61,9 @@ class ProductCatalogAPITest(TestCase):
             phone_number="+2348055556666"
         )
 
-    def test_vendor_product_creation_defaults_to_pending(self):
+    def test_vendor_product_goes_live_on_creation(self):
         """
-        Sprint 3 Test 1: As an approved vendor, call POST /api/v1/products/
-        Verify product is created with approval_status = PENDING.
+        Pieces go live as soon as the designer saves them (no pre-approval since Nov 2026).
         """
         self.client.force_authenticate(user=self.vendor_user)
 
@@ -81,8 +80,11 @@ class ProductCatalogAPITest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertTrue(response.data["success"])
         self.assertEqual(response.data["product"]["title"], "Royal Silk Agbada")
-        self.assertEqual(response.data["product"]["approval_status"], "PENDING")
+        self.assertEqual(response.data["product"]["approval_status"], "APPROVED")
+        self.assertIn("live", response.data["message"])
         self.assertEqual(response.data["product"]["base_price_kobo"], 7500000)
+        public = self.client.get("/api/v1/products/")
+        self.assertIn("Royal Silk Agbada", [p["title"] for p in public.data["products"]])
         self.assertEqual(response.data["product"]["base_price_naira"], 75000.0)
 
     def test_public_unapproved_filter_hides_pending_products(self):
@@ -237,8 +239,8 @@ class ProductCatalogAPITest(TestCase):
         )
         self.assertEqual(res_patch.status_code, status.HTTP_200_OK)
         self.assertEqual(res_patch.data["product"]["title"], "Updated Title")
-        # Updating core details resets approval_status to PENDING
-        self.assertEqual(res_patch.data["product"]["approval_status"], "PENDING")
+        # Editing a live piece keeps it live
+        self.assertEqual(res_patch.data["product"]["approval_status"], "APPROVED")
 
         # Vendor soft-deletes product
         res_del = self.client.delete(f"/api/v1/vendor/products/{prod.id}/")
