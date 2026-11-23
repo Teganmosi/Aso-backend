@@ -44,6 +44,9 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.gzip.GZipMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    # Serves /static/ (admin CSS/JS) from gunicorn; nothing else in the stack serves it,
+    # so the admin rendered as unstyled HTML.
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -121,6 +124,11 @@ USE_TZ = True
 # Static & Media Files
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    # Compressed (gzip/brotli) copies made at collectstatic; served by WhiteNoise.
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage'},
+}
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 

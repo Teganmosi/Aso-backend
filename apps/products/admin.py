@@ -1,5 +1,9 @@
+from apps.common.admin_display import badge, naira, thumb
 from apps.common.notifications import send_product_review_notification
+from django import forms
 from django.contrib import admin
+from django.db import models
+from django.utils.html import format_html_join
 from apps.products.models import Category, Product, ProductVariant, ProductMedia, Review, ApprovalStatus, ProductStatus
 from apps.products.services import invalidate_product_caches
 
@@ -7,15 +11,22 @@ from apps.products.services import invalidate_product_caches
 
 class ProductVariantInline(admin.TabularInline):
     model = ProductVariant
-    extra = 1
+    extra = 0
     fields = ['size', 'color', 'sku', 'stock_quantity', 'price_override_kobo', 'is_active']
     readonly_fields = ['sku']
 
 
 class ProductMediaInline(admin.TabularInline):
     model = ProductMedia
-    extra = 1
-    fields = ['media_type', 'url', 'display_order', 'is_primary']
+    extra = 0
+    fields = ['preview', 'media_type', 'url', 'display_order', 'is_primary']
+    readonly_fields = ['preview']
+    # One-line address box instead of a large textarea (older photos are long data URIs).
+    formfield_overrides = {models.TextField: {'widget': forms.TextInput(attrs={'size': 60})}}
+
+    @admin.display(description='Photo')
+    def preview(self, obj):
+        return thumb((obj.thumbnail_url or obj.url) if obj and obj.pk else None, 72)
 
 
 @admin.register(Category)
@@ -30,20 +41,75 @@ class CategoryAdmin(admin.ModelAdmin):
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = [
+        'photo',
         'title',
         'vendor',
         'category',
-        'base_price_kobo',
-        'approval_status',
+        'price',
+        'review_badge',
         'status',
         'is_active',
         'created_at'
     ]
-    list_filter = ['approval_status', 'status', 'is_active', 'category']
+    list_display_links = ['photo', 'title']
+    list_filter = ['approval_status', 'status', 'is_active', 'category', 'vendor']
     search_fields = ['title', 'slug', 'vendor__store_name', 'description']
     prepopulated_fields = {'slug': ('title',)}
     inlines = [ProductVariantInline, ProductMediaInline]
     actions = ['approve_selected_products', 'reject_selected_products']
+    list_select_related = ['vendor', 'category']
+    ordering = ['-created_at']
+    list_per_page = 40
+    readonly_fields = ['photos_preview', 'price', 'average_rating', 'review_count']
+    fieldsets = [
+        ('Review', {
+            'description': 'Check the photos, title, price and sizes. To ask for changes, choose '
+                           '"Rejected", write what to change, and save: the designer is emailed.',
+            'fields': ['photos_preview', 'approval_status', 'rejection_reason', 'status', 'is_active'],
+        }),
+        ('The piece', {
+            'fields': ['vendor', 'category', 'title', 'slug', 'description',
+                       ('base_price_kobo', 'price'), 'preparation_time_days'],
+        }),
+        ('Ratings and size chart', {
+            'classes': ['collapse'],
+            'fields': [('average_rating', 'review_count'), 'size_chart'],
+        }),
+    ]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('media')
+
+    def _media(self, obj):
+        return sorted(obj.media.all(), key=lambda m: (not m.is_primary, m.display_order))
+
+    @staticmethod
+    def _small_url(m):
+        # Older uploads may be inline data URIs; don't paste megabytes into every list row.
+        url = m.thumbnail_url or m.url
+        return None if url.startswith('data:') and len(url) > 150_000 else url
+
+    @admin.display(description='')
+    def photo(self, obj):
+        media = self._media(obj)
+        return thumb(self._small_url(media[0]) if media else None)
+
+    @admin.display(description='Photos (check front, back and details)')
+    def photos_preview(self, obj):
+        media = self._media(obj)
+        if not media:
+            return 'No photos'
+        return format_html_join('', '<a href="{0}" target="_blank" rel="noopener">{1}</a> ',
+                                ((m.url, thumb(m.thumbnail_url or m.url, 140)) for m in media))
+
+    @admin.display(description='Price', ordering='base_price_kobo')
+    def price(self, obj):
+        return naira(obj.base_price_kobo)
+
+    @admin.display(description='Review', ordering='approval_status')
+    def review_badge(self, obj):
+        label = {'PENDING': 'Waiting for review', 'APPROVED': 'Live', 'REJECTED': 'Changes requested'}
+        return badge(obj.approval_status, label.get(obj.approval_status))
 
     @admin.action(description="Approve selected products and mark as PUBLISHED")
     def approve_selected_products(self, request, queryset):

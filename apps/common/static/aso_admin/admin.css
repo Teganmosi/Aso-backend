@@ -1,0 +1,165 @@
+/* Aso Admin theme: brand colours on top of Django's admin variables.
+   Same selector pattern as Django's base.css / dark_mode.css, so "auto", "light" and "dark"
+   (the theme toggle) all resolve correctly. Page background and text colours are left to
+   Django in each mode; only brand colours and a few tints are set here. */
+
+html[data-theme="light"],
+:root {
+  --aso-green: #064E3B;
+  --aso-green-deep: #04382B;
+  --aso-green-mid: #0A6B51;
+  --aso-gold: #C59B27;
+  --aso-gold-soft: #E6C766;
+  --aso-cream: #FAF7F2;
+
+  --primary: #0A6B51;
+  --secondary: #064E3B;
+  --accent: #E6C766;
+  --primary-fg: #FFFFFF;
+  --header-color: #FAF7F2;
+  --header-branding-color: #E6C766;
+  --header-bg: #04382B;
+  --header-link-color: #FAF7F2;
+  --breadcrumbs-fg: #D1FAE5;
+  --breadcrumbs-link-fg: #FFFFFF;
+  --breadcrumbs-bg: #064E3B;
+  --link-fg: #065F46;
+  --link-hover-color: #A17C15;
+  --link-selected-fg: #064E3B;
+  --darkened-bg: #F6F3EE;
+  --selected-row: #FFF6D6;
+  --button-bg: #064E3B;
+  --button-hover-bg: #0A6B51;
+  --default-button-bg: #C59B27;
+  --default-button-hover-bg: #A17C15;
+  --object-tools-bg: #4B5563;
+  --object-tools-hover-bg: #064E3B;
+  --font-family-primary: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --aso-card-bg: #FFFFFF;
+}
+
+/* Dark mode (system setting, theme toggle on "auto"): Django supplies dark page colours. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --link-fg: #6EE7B7;
+    --link-hover-color: #E6C766;
+    --link-selected-fg: #A7F3D0;
+    --breadcrumbs-bg: #04382B;
+    --selected-row: #2A2615;
+    --darkened-bg: #222826;
+    --aso-card-bg: #1A1D1C;
+  }
+}
+/* Dark mode chosen with the theme toggle. */
+html[data-theme="dark"] {
+  --link-fg: #6EE7B7;
+  --link-hover-color: #E6C766;
+  --link-selected-fg: #A7F3D0;
+  --breadcrumbs-bg: #04382B;
+  --selected-row: #2A2615;
+  --darkened-bg: #222826;
+  --aso-card-bg: #1A1D1C;
+}
+
+body { font-family: var(--font-family-primary); }
+
+/* Header */
+#header { padding: 12px 40px; box-shadow: 0 1px 0 rgba(0, 0, 0, .15); }
+#site-name a.aso-brand { display: inline-flex; align-items: center; }
+#site-name a.aso-brand svg { display: block; }
+#user-tools { font-size: 12px; }
+div.breadcrumbs { padding: 10px 40px; }
+
+/* Section headings and module captions */
+.module h2, .module caption, .inline-group h2 {
+  background: var(--aso-green);
+  color: #FFFFFF;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+#content h1 { font-weight: 800; color: var(--body-loud-color); }
+.app-list .module caption a.section, .module caption a.section { color: #FFFFFF; }
+
+/* Buttons */
+.button, input[type=submit], input[type=button], .submit-row input, a.button {
+  border-radius: 6px;
+  font-weight: 700;
+}
+.submit-row { border-radius: 8px; }
+.object-tools a { border-radius: 999px; }
+
+/* Lists */
+#changelist table thead th { font-weight: 700; }
+#changelist .actions { border-radius: 8px; }
+#changelist-filter h2 { background: var(--aso-green); color: #FFFFFF; border-radius: 6px 6px 0 0; }
+td small, th small { color: var(--body-quiet-color); font-size: 11px; }
+.aso-late { color: #B91C1C; font-weight: 700; }
+
+/* Status badges */
+.aso-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+.aso-badge--good { background: #D1FAE5; color: #065F46; }
+.aso-badge--action { background: #FEF3C7; color: #92400E; }
+.aso-badge--progress { background: #DBEAFE; color: #1E40AF; }
+.aso-badge--bad { background: #FEE2E2; color: #991B1B; }
+.aso-badge--neutral { background: #E5E7EB; color: #374151; }
+
+/* Thumbnails */
+.aso-thumb { border-radius: 6px; object-fit: cover; background: var(--darkened-bg); vertical-align: middle; }
+.aso-thumb--empty { display: inline-flex; align-items: center; justify-content: center; color: var(--body-quiet-color); }
+
+/* "Needs your attention" dashboard */
+.aso-dash { margin: 0 0 24px; }
+.aso-dash__head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.aso-dash__head h2 { margin: 0; font-size: 18px; font-weight: 800; color: var(--body-loud-color); }
+.aso-tasks { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.aso-task {
+  display: flex; gap: 14px; align-items: center;
+  padding: 14px 16px; border-radius: 10px;
+  border: 1px solid var(--hairline-color); background: var(--aso-card-bg);
+  text-decoration: none !important; color: var(--body-fg) !important;
+  transition: border-color .15s, transform .15s;
+}
+.aso-task:hover { border-color: var(--aso-gold); transform: translateY(-1px); }
+.aso-task__count {
+  flex: 0 0 auto; min-width: 46px; height: 46px; padding: 0 8px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 800; background: var(--darkened-bg); color: var(--body-quiet-color);
+}
+.aso-task--open .aso-task__count { background: #FEF3C7; color: #92400E; }
+.aso-task--urgent { border-color: #FCA5A5; }
+.aso-task--urgent .aso-task__count { background: #FEE2E2; color: #991B1B; }
+.aso-task__text strong { display: block; font-size: 14px; color: var(--body-loud-color); }
+.aso-task__text small { display: block; margin-top: 2px; font-size: 12px; color: var(--body-quiet-color); }
+.aso-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 12px; }
+.aso-stat { padding: 12px 16px; border-radius: 10px; background: var(--darkened-bg); }
+.aso-stat span { display: block; font-size: 12px; color: var(--body-quiet-color); }
+.aso-stat strong { display: block; margin-top: 2px; font-size: 20px; font-weight: 800; color: var(--body-loud-color); }
+
+/* Login page */
+.login #header { justify-content: center; }
+.login #container { border-radius: 12px; overflow: hidden; box-shadow: 0 20px 50px rgba(0, 0, 0, .12); }
+
+@media (max-width: 767px) {
+  #header, div.breadcrumbs { padding-left: 16px; padding-right: 16px; }
+  .aso-tasks { grid-template-columns: 1fr; }
+}
+
+/* Home page: Django boxes it to 600px; use the width (sidebar "Recent actions" stays on the right). */
+.dashboard #content { width: auto; max-width: 1240px; }
+
+/* Keep identifiers and dates on one line in lists. */
+#result_list .field-order_number,
+#result_list .field-reference,
+#result_list .field-created_at,
+#result_list .field-total,
+#result_list .field-amount,
+#result_list .field-price { white-space: nowrap; }
+#result_list .field-title, #result_list .field-what { min-width: 160px; }

@@ -96,6 +96,8 @@ class CustomerProfile(UUIDModel):
 
     class Meta:
         db_table = 'accounts_customerprofile'
+        verbose_name = 'Shopper profile'
+        verbose_name_plural = 'Shopper profiles'
 
     def __str__(self):
         return f"CustomerProfile for {self.user.email}"
@@ -116,6 +118,8 @@ class Address(UUIDModel):
 
     class Meta:
         db_table = 'accounts_address'
+        verbose_name = 'Delivery address'
+        verbose_name_plural = 'Delivery addresses'
         ordering = ['-is_default', '-created_at']
 
     def __str__(self):

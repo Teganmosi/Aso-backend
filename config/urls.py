@@ -6,6 +6,12 @@ from django.http import HttpResponseRedirect
 from django.conf import settings
 from apps.payments.views import PaymentWebhookView
 
+admin.site.site_header = 'Aso Admin'
+admin.site.site_title = 'Aso Admin'
+admin.site.index_title = 'Today at Aso'
+# The left-hand app menu squeezed every table; Home and the breadcrumbs cover navigation.
+admin.site.enable_nav_sidebar = False
+
 def order_redirect_view(request):
     query = request.META.get('QUERY_STRING', '')
     frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
