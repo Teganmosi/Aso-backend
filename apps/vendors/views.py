@@ -64,7 +64,7 @@ class VendorRegisterView(APIView):
 
         return Response({
             'success': True,
-            'message': 'Your studio is live. Add your first piece; each piece is reviewed before it appears publicly.',
+            'message': 'Your studio is open. Add your first piece and it goes live straight away.',
             'vendor': VendorProfileSerializer(vendor_profile).data
         }, status=status.HTTP_201_CREATED)
 

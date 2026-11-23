@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.http import Http404
 
-from apps.products.models import ProductVariant, ProductMedia
+from apps.products.models import ProductMedia, ProductStatus, ProductVariant
 from apps.products.serializers import (
     CategorySerializer,
     ProductCreateUpdateSerializer,
@@ -40,6 +40,12 @@ from apps.products.services import (
 )
 from apps.products.utils import generate_presigned_upload_url
 from apps.products.permissions import IsApprovedVendor
+
+
+def _created_message(product) -> str:
+    if product.status == ProductStatus.PUBLISHED:
+        return 'Your piece is live. Shoppers can see it now.'
+    return 'Saved as a draft. Publish it when you are ready.'
 
 
 class CategoryListView(APIView):
@@ -148,7 +154,7 @@ class PublicProductListView(APIView):
 
         return Response({
             'success': True,
-            'message': 'Product created successfully and submitted for admin approval.',
+            'message': _created_message(product),
             'product': ProductDetailSerializer(product).data
         }, status=status.HTTP_201_CREATED)
 
@@ -207,7 +213,7 @@ class VendorProductListCreateView(APIView):
     """
     Vendor product management view:
     - GET: List all products created by the approved vendor.
-    - POST: Create a new product (defaults to PENDING approval).
+    - POST: Create a new product (live straight away; Aso can take it down later).
     """
     permission_classes = [IsApprovedVendor]
 
@@ -230,7 +236,7 @@ class VendorProductListCreateView(APIView):
 
         return Response({
             'success': True,
-            'message': 'Product created successfully and submitted for admin approval.',
+            'message': _created_message(product),
             'product': ProductDetailSerializer(product).data
         }, status=status.HTTP_201_CREATED)
 
