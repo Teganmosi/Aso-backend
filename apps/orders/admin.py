@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.utils import timezone
+from django.utils.html import format_html
+from apps.common.admin_display import badge, naira
 from apps.orders.models import Order, OrderItem
 
 
@@ -21,26 +24,81 @@ class OrderItemInline(admin.TabularInline):
         'product_title_snapshot',
         'variant_size_snapshot',
         'variant_color_snapshot',
-        'sku_snapshot',
-        'unit_price_kobo',
+        'measurements',
+        'unit_price',
         'quantity',
-        'total_price_kobo'
+        'line_total',
     ]
+    readonly_fields = readonly_fields + ['measurements', 'unit_price', 'line_total']
+
+    @admin.display(description='Unit price')
+    def unit_price(self, obj):
+        return naira(obj.unit_price_kobo)
+
+    @admin.display(description='Total')
+    def line_total(self, obj):
+        return naira(obj.total_price_kobo)
+
+    @admin.display(description='Measurements')
+    def measurements(self, obj):
+        m = obj.custom_measurements or {}
+        if not m:
+            return '—'
+        return ', '.join(f'{k.replace("_", " ")}: {v}' for k, v in m.items() if not isinstance(v, (dict, list)))
 
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
     list_display = [
         'order_number',
-        'customer',
+        'created_at',
+        'status_badge',
+        'what',
         'vendor',
-        'order_status',
-        'total_amount_naira',
-        'payment_expires_at',
-        'created_at'
+        'shopper',
+        'total',
+        'accept_by',
     ]
-    list_filter = ['order_status', 'created_at']
-    search_fields = ['order_number', 'customer__email', 'vendor__store_name']
+    list_filter = ['order_status', 'created_at', 'vendor']
+    search_fields = ['order_number', 'customer__email', 'customer__phone_number', 'vendor__store_name']
+    list_select_related = ['customer', 'vendor']
+    date_hierarchy = 'created_at'
+    ordering = ['-created_at']
+    list_per_page = 50
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('items')
+
+    @admin.display(description='Status', ordering='order_status')
+    def status_badge(self, obj):
+        return badge(obj.order_status, obj.get_order_status_display())
+
+    @admin.display(description='Piece')
+    def what(self, obj):
+        items = list(obj.items.all())
+        if not items:
+            return '—'
+        first = items[0]
+        more = f' +{len(items) - 1} more' if len(items) > 1 else ''
+        return f'{first.product_title_snapshot} ({first.variant_size_snapshot}){more}'
+
+    @admin.display(description='Shopper', ordering='customer__email')
+    def shopper(self, obj):
+        name = (obj.shipping_address_snapshot or {}).get('full_name') or obj.customer.get_full_name()
+        return format_html('{}<br><small>{}</small>', name or '—', obj.customer.email)
+
+    @admin.display(description='Total', ordering='total_amount_kobo')
+    def total(self, obj):
+        return naira(obj.total_amount_kobo)
+
+    @admin.display(description='Designer must accept by', ordering='vendor_accept_due_by')
+    def accept_by(self, obj):
+        from apps.orders.models import OrderStatus
+        if obj.order_status != OrderStatus.PAID or not obj.vendor_accept_due_by:
+            return '—'
+        late = obj.vendor_accept_due_by < timezone.now()
+        return format_html('<span class="{}">{}</span>', 'aso-late' if late else '',
+                           timezone.localtime(obj.vendor_accept_due_by).strftime('%d %b, %H:%M'))
     readonly_fields = [
         'id',
         'order_number',

@@ -115,6 +115,8 @@ class Product(UUIDModel):
 
     class Meta:
         db_table = 'products_product'
+        verbose_name = 'Piece'
+        verbose_name_plural = 'Pieces'
         ordering = ['-created_at']
 
     def __str__(self):
@@ -174,6 +176,8 @@ class ProductVariant(UUIDModel):
 
     class Meta:
         db_table = 'products_productvariant'
+        verbose_name = 'Size and stock'
+        verbose_name_plural = 'Sizes and stock'
         ordering = ['size', 'color']
 
     def __str__(self):
@@ -234,6 +238,8 @@ class ProductMedia(UUIDModel):
 
     class Meta:
         db_table = 'products_productmedia'
+        verbose_name = 'Piece photo'
+        verbose_name_plural = 'Piece photos'
         ordering = ['display_order', '-is_primary', 'created_at']
 
     def __str__(self):

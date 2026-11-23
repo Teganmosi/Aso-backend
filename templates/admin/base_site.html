@@ -1,0 +1,32 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | Aso Admin{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="{% static 'aso_admin/admin.css' %}">
+  <link rel="icon" href="https://asomarketplace.com.ng/favicon.svg" type="image/svg+xml">
+{% endblock %}
+
+{% block branding %}
+<div id="site-name">
+  <a href="{% url 'admin:index' %}" class="aso-brand" aria-label="Aso Admin home">
+    <svg width="150" height="45" viewBox="0 0 400 120" fill="none" aria-hidden="true">
+      <g transform="translate(20,15)">
+        <path d="M24 76 L68 16" stroke="#FAF7F2" stroke-width="6" stroke-linecap="round"/>
+        <path d="M8 52 C 28 16, 68 24, 56 52 C 44 76, 84 76, 88 44" stroke="#C59B27" stroke-width="6.5" stroke-linecap="round" fill="none"/>
+      </g>
+      <text x="135" y="70" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="52" font-weight="800" letter-spacing="6" fill="#FAF7F2">ASO</text>
+      <text x="137" y="94" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="4" fill="#E6C766">ADMIN</text>
+    </svg>
+  </a>
+</div>
+{% if user.is_anonymous %}
+  {% include "admin/color_theme_toggle.html" %}
+{% endif %}
+{% endblock %}
+
+{% block nav-global %}{% endblock %}

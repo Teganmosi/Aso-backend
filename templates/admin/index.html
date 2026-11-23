@@ -1,0 +1,5 @@
+{% extends "admin/index.html" %}
+{% load aso_admin %}
+
+{# "Today at Aso", then what needs attention, full width above the app list and "Recent actions". #}
+{% block content_title %}{{ block.super }}{% aso_dashboard %}{% endblock %}

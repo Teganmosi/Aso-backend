@@ -1,0 +1,24 @@
+<section class="aso-dash" aria-labelledby="aso-dash-title">
+  <div class="aso-dash__head">
+    <h2 id="aso-dash-title">Needs your attention</h2>
+    {% if all_clear %}<span class="aso-badge aso-badge--good">All clear</span>{% endif %}
+  </div>
+
+  <div class="aso-tasks">
+    {% for t in tasks %}
+      <a class="aso-task{% if t.count %} aso-task--open{% endif %}{% if t.urgent %} aso-task--urgent{% endif %}" href="{{ t.url }}">
+        <span class="aso-task__count">{{ t.count }}</span>
+        <span class="aso-task__text">
+          <strong>{{ t.label }}</strong>
+          <small>{{ t.hint }}</small>
+        </span>
+      </a>
+    {% endfor %}
+  </div>
+
+  <div class="aso-stats">
+    {% for s in stats %}
+      <div class="aso-stat"><span>{{ s.label }}</span><strong>{{ s.value }}</strong></div>
+    {% endfor %}
+  </div>
+</section>

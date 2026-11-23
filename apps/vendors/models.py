@@ -67,10 +67,13 @@ class VendorProfile(UUIDModel):
 
     class Meta:
         db_table = 'vendors_vendorprofile'
+        verbose_name = 'Designer studio'
+        verbose_name_plural = 'Designer studios'
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.store_name} ({self.status})"
+        # Just the name: the status was repeated as "(APPROVED)" in every admin list and dropdown.
+        return self.store_name
 
     @property
     def has_started_verification(self) -> bool:

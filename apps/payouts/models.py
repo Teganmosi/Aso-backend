@@ -33,8 +33,8 @@ class VendorBalance(UUIDModel):
 
     class Meta:
         db_table = 'payouts_vendorbalance'
-        verbose_name = 'Vendor Balance'
-        verbose_name_plural = 'Vendor Balances'
+        verbose_name = 'Designer balance'
+        verbose_name_plural = 'Designer balances'
 
     def __str__(self):
         return f"{self.vendor.store_name} - Pending: {self.pending_balance_kobo}, Available: {self.available_balance_kobo}"
@@ -53,8 +53,8 @@ class LedgerEntry(UUIDModel):
 
     class Meta:
         db_table = 'payouts_ledgerentry'
-        verbose_name = 'Ledger Entry'
-        verbose_name_plural = 'Ledger Entries'
+        verbose_name = 'Money movement'
+        verbose_name_plural = 'Money movements'
         ordering = ['-created_at']
 
     def __str__(self):
