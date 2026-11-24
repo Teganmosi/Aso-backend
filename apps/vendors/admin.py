@@ -127,6 +127,16 @@ class VendorProfileAdmin(admin.ModelAdmin):
                        'verification_reviewed_at', 'verification_reviewed_by', 'created_at', 'updated_at',
                        'owner_contact', 'pieces_link', 'identity_status', 'reviewed', 'verified_badge')
 
+    def get_actions(self, request):
+        # Django's plain "Delete selected" fails whenever a studio has orders. Removing a studio
+        # goes through "Erase personal data or delete a test studio…" instead.
+        actions = super().get_actions(request)
+        actions.pop('delete_selected', None)
+        return actions
+
+    def has_delete_permission(self, request, obj=None):
+        return False  # use the erase / delete-test-studio action (it handles orders safely)
+
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
         labels = {'nin_number': 'NIN', 'cac_number': 'CAC number', 'user': 'Account',

@@ -118,3 +118,10 @@ class EraseDesignerTests(TestCase):
                                      bank_account=self.vendor.bank_account, status=PayoutStatus.PAYOUT_RESERVED)
         self.post_action(delete_test_confirmed='1', confirm_text='DELETE')
         self.assertFalse(VendorProfile.objects.filter(pk=self.vendor.pk).exists())
+
+    def test_only_the_safe_removal_action_is_offered(self):
+        page = self.client.get(reverse('admin:vendors_vendorprofile_changelist')).content.decode()
+        self.assertIn('erase_personal_data', page)
+        self.assertNotIn('value="delete_selected"', page)
+        detail = self.client.get(reverse('admin:vendors_vendorprofile_change', args=[self.vendor.pk])).content.decode()
+        self.assertNotIn('class="deletelink"', detail)
