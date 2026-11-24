@@ -136,7 +136,7 @@ class VendorProfileAdmin(admin.ModelAdmin):
             if name in form.base_fields:
                 form.base_fields[name].label = label
         if 'slug' in form.base_fields:
-            form.base_fields['slug'].help_text = 'The end of the studio link, e.g. asomarketplace.com.ng/designers/<this>'
+            form.base_fields['slug'].help_text = 'The end of the studio link: asomarketplace.com.ng/store/your-studio-name'
         return form
 
     @admin.display(description='Check status')
