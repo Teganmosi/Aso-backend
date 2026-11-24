@@ -67,6 +67,7 @@ class ProductAdmin(admin.ModelAdmin):
     list_filter = ['approval_status', 'status', 'created_at', 'is_active', 'category', 'vendor']
     date_hierarchy = 'created_at'
     search_fields = ['title', 'slug', 'vendor__store_name', 'description']
+    search_help_text = 'Search by piece name or studio name'
     prepopulated_fields = {'slug': ('title',)}
     inlines = [ProductVariantInline, ProductMediaInline]
     actions = ['approve_selected_products', 'reject_selected_products']
@@ -201,4 +202,7 @@ class ReviewAdmin(admin.ModelAdmin):
     list_filter = ['rating', 'is_verified_purchase', 'created_at']
     search_fields = ['product__title', 'vendor__store_name', 'customer__email', 'comment']
     readonly_fields = ['order_item', 'product', 'vendor', 'customer', 'created_at', 'updated_at']
+
+    def has_add_permission(self, request):
+        return False  # created by the site, not by hand
 

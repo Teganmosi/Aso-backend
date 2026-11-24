@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils import timezone
 from django.utils.html import format_html
-from apps.common.admin_display import badge, naira
+from apps.common.admin_display import badge, naira, whatsapp_link
 from apps.orders.models import Order, OrderItem
 
 
@@ -20,16 +20,26 @@ class OrderItemInline(admin.TabularInline):
         'total_price_kobo',
         'created_at'
     ]
-    fields = [
-        'product_title_snapshot',
-        'variant_size_snapshot',
-        'variant_color_snapshot',
-        'measurements',
-        'unit_price',
-        'quantity',
-        'line_total',
-    ]
-    readonly_fields = readonly_fields + ['measurements', 'unit_price', 'line_total']
+    fields = ['piece', 'size', 'colour', 'measurements', 'unit_price', 'quantity', 'line_total']
+    readonly_fields = readonly_fields + ['piece', 'size', 'colour', 'measurements', 'unit_price', 'line_total']
+    verbose_name = 'Piece in this order'
+    verbose_name_plural = 'Pieces in this order'
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False  # what was bought is fixed once the shopper pays
+
+    @admin.display(description='Piece')
+    def piece(self, obj):
+        return obj.product_title_snapshot
+
+    @admin.display(description='Size')
+    def size(self, obj):
+        return obj.variant_size_snapshot or '—'
+
+    @admin.display(description='Colour')
+    def colour(self, obj):
+        return obj.variant_color_snapshot or '—'
 
     @admin.display(description='Unit price')
     def unit_price(self, obj):
@@ -99,22 +109,83 @@ class OrderAdmin(admin.ModelAdmin):
         late = obj.vendor_accept_due_by < timezone.now()
         return format_html('<span class="{}">{}</span>', 'aso-late' if late else '',
                            timezone.localtime(obj.vendor_accept_due_by).strftime('%d %b, %H:%M'))
+    search_help_text = 'Search by order number, shopper email or phone, or studio name'
     readonly_fields = [
-        'id',
-        'order_number',
-        'customer',
-        'vendor',
-        'subtotal_kobo',
-        'delivery_fee_kobo',
-        'total_amount_kobo',
-        'subtotal_naira',
-        'delivery_fee_naira',
-        'total_amount_naira',
-        'payment_expires_at',
-        'shipping_address_snapshot',
-        'created_at',
-        'updated_at'
+        'id', 'order_number', 'placed', 'shopper_contact', 'designer_contact', 'deliver_to',
+        'subtotal', 'delivery_fee', 'total_paid', 'timeline',
     ]
+    fieldsets = [
+        (None, {'fields': ['order_number', 'order_status', 'placed']}),
+        ('Who', {'fields': ['shopper_contact', 'designer_contact', 'deliver_to']}),
+        ('Money', {'fields': ['subtotal', 'delivery_fee', 'total_paid']}),
+        ('Progress', {'fields': ['timeline']}),
+        ('Cancellation note', {
+            'classes': ['collapse'],
+            'fields': ['cancellation_reason'],
+            'description': 'Shown to the shopper and the designer. To cancel and stop the designer payment, '
+                           'use the "Cancel selected orders" action on the orders list.',
+        }),
+        ('Technical', {'fields': ['id'], 'classes': ['collapse']}),
+    ]
+
+    def has_add_permission(self, request):
+        return False  # orders only come from shoppers checking out
+
+    def has_delete_permission(self, request, obj=None):
+        return False  # deleting would orphan payments and designer earnings; cancel instead
+
+    @admin.display(description='So far')
+    def timeline(self, obj):
+        from django.utils.html import format_html_join
+
+        def when(dt):
+            return timezone.localtime(dt).strftime('%d %b, %H:%M')
+        steps = [('Order placed', obj.created_at), ('Designer accepted', obj.vendor_accepted_at),
+                 ('Finished sewing', obj.prepared_at), ('Ready for pickup', obj.ready_for_pickup_at)]
+        rows = [(label, when(dt)) for label, dt in steps if dt]
+        if not obj.vendor_accepted_at and obj.vendor_accept_due_by:
+            rows.append(('Designer must accept by', when(obj.vendor_accept_due_by)))
+        rows.append(('Last change', when(obj.updated_at)))
+        return format_html('<ul class="aso-timeline">{}</ul>',
+                           format_html_join('', '<li><span>{}</span> {}</li>', rows))
+
+    @admin.display(description='Placed')
+    def placed(self, obj):
+        return timezone.localtime(obj.created_at).strftime('%d %b %Y, %H:%M')
+
+    @admin.display(description='Shopper')
+    def shopper_contact(self, obj):
+        snap = obj.shipping_address_snapshot or {}
+        name = snap.get('full_name') or obj.customer.get_full_name() or obj.customer.email
+        phone = snap.get('phone_number') or obj.customer.phone_number
+        return format_html('<strong>{}</strong><br>{}<br>{}', name, obj.customer.email, whatsapp_link(phone))
+
+    @admin.display(description='Designer')
+    def designer_contact(self, obj):
+        v = obj.vendor
+        pickup = ', '.join(x for x in (v.workshop_address, v.landmark, v.city, v.state) if x)
+        return format_html('<strong>{}</strong><br>{}<br>{}<br><small>Pickup: {}</small>', v.store_name,
+                           v.user.email, whatsapp_link(v.user.phone_number), pickup or 'no workshop address yet')
+
+    @admin.display(description='Deliver to')
+    def deliver_to(self, obj):
+        snap = obj.shipping_address_snapshot or {}
+        lines = [snap.get('street_address') or snap.get('address'), snap.get('landmark') and f"Near {snap['landmark']}",
+                 ', '.join(x for x in (snap.get('city'), snap.get('state')) if x)]
+        return ', '.join(x for x in lines if x) or '—'
+
+    @admin.display(description='Pieces')
+    def subtotal(self, obj):
+        return naira(obj.subtotal_kobo)
+
+    @admin.display(description='Delivery')
+    def delivery_fee(self, obj):
+        return naira(obj.delivery_fee_kobo)
+
+    @admin.display(description='Total paid')
+    def total_paid(self, obj):
+        return format_html('<strong>{}</strong>', naira(obj.total_amount_kobo))
+
     inlines = [OrderItemInline]
     actions = ['mark_as_disputed', 'resolve_dispute_complete', 'cancel_and_refund_order']
 
@@ -163,6 +234,9 @@ class OrderItemAdmin(admin.ModelAdmin):
         'created_at'
     ]
     search_fields = ['order__order_number', 'sku_snapshot', 'product_title_snapshot']
+
+    def has_add_permission(self, request):
+        return False
     readonly_fields = [
         'id',
         'order',
@@ -194,6 +268,9 @@ class OrderMessageAdmin(admin.ModelAdmin):
     ]
     list_filter = ['is_masked', 'mask_tier', 'message_type', 'created_at']
     search_fields = ['order__order_number', 'sender__email', 'content', 'original_content']
+
+    def has_add_permission(self, request):
+        return False
     readonly_fields = [
         'id',
         'order',

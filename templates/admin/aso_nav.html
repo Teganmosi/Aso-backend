@@ -1,0 +1,9 @@
+{% if items %}
+<nav class="aso-nav" aria-label="Main sections">
+  <div class="aso-nav__inner">
+  {% for i in items %}
+    <a href="{{ i.url }}"{% if i.active %} class="is-active" aria-current="page"{% endif %}>{{ i.label }}{% if i.count %} <span class="aso-nav__count" title="Waiting for you">{{ i.count }}</span>{% endif %}</a>
+  {% endfor %}
+  </div>
+</nav>
+{% endif %}

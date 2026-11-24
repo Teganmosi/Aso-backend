@@ -1,5 +1,5 @@
 {% extends "admin/base.html" %}
-{% load static %}
+{% load static aso_admin %}
 
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | Aso Admin{% endblock %}
 
@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="{% static 'aso_admin/admin.css' %}">
   <link rel="icon" href="https://asomarketplace.com.ng/favicon.svg" type="image/svg+xml">
+  <script src="{% static 'aso_admin/admin.js' %}" defer></script>
 {% endblock %}
 
 {% block branding %}
@@ -30,3 +31,10 @@
 {% endblock %}
 
 {% block nav-global %}{% endblock %}
+
+{# Main sections, on every page, above the breadcrumbs. #}
+{% block nav-breadcrumbs %}{% aso_nav %}{{ block.super }}{% endblock %}
+
+{# Plain titles: "Orders", not "Select order to change"; the record's name, not "Change order". #}
+{% block content_title %}{% if cl %}<h1>{{ cl.opts.verbose_name_plural|capfirst }}</h1>{% elif add and opts %}<h1>New {{ opts.verbose_name }}</h1>{% elif change and original %}<h1>{{ original }}</h1>{% elif title %}<h1>{{ title }}</h1>{% endif %}{% endblock %}
+{% block content_subtitle %}{% if subtitle and not original and not cl %}<h2>{{ subtitle }}</h2>{% endif %}{% endblock %}

@@ -7,6 +7,7 @@ class UserAdmin(BaseUserAdmin):
     list_display = ('email', 'first_name', 'last_name', 'phone_number', 'email_confirmed', 'is_staff', 'is_active', 'date_joined')
     list_filter = ('is_staff', 'is_active', 'is_superuser', ('email_verified_at', admin.EmptyFieldListFilter))
     search_fields = ('email', 'first_name', 'last_name', 'phone_number')
+    search_help_text = 'Search by name, email or phone'
     ordering = ('-date_joined',)
     actions = ['mark_email_confirmed']
 

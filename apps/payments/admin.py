@@ -20,6 +20,9 @@ class PaymentRequestAdmin(admin.ModelAdmin):
     readonly_fields = ['created_at', 'updated_at']
     raw_id_fields = ['order']
 
+    def has_add_permission(self, request):
+        return False  # created by the site, not by hand
+
 
 @admin.register(PaymentWebhookLog)
 class PaymentWebhookLogAdmin(admin.ModelAdmin):

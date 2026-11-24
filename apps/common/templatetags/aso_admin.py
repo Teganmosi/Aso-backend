@@ -84,3 +84,54 @@ def aso_dashboard(context):
         {'label': 'Designers', 'value': VendorProfile.objects.count()},
     ]
     return {'tasks': tasks, 'stats': stats, 'all_clear': not any(t['count'] for t in tasks)}
+
+
+# Top navigation: the places staff go every day. (model, label, count of things waiting)
+_NAV = [
+    ('orders', 'order', 'Orders'),
+    ('products', 'product', 'Pieces'),
+    ('vendors', 'vendorprofile', 'Designers'),
+    ('payouts', 'payoutrequest', 'Payouts'),
+    ('deliveries', 'delivery', 'Deliveries'),
+    ('accounts', 'user', 'Shoppers & accounts'),
+]
+# Which nav tab a page belongs to, by app label.
+_SECTION = {'orders': 'orders', 'products': 'products', 'vendors': 'vendors', 'payouts': 'payouts',
+            'deliveries': 'deliveries', 'accounts': 'accounts', 'cart': 'accounts', 'auth': 'accounts'}
+
+
+def _waiting_counts():
+    from apps.orders.models import Order, OrderStatus
+    from apps.payouts.models import PayoutRequest, PayoutStatus
+    from apps.vendors.models import VendorProfile, VerificationStatus
+    return {
+        'orders': Order.objects.filter(order_status__in=[
+            OrderStatus.PAID, OrderStatus.READY_FOR_PICKUP, OrderStatus.DISPUTED]).count(),
+        'vendors': VendorProfile.objects.filter(verification_status=VerificationStatus.PENDING_REVIEW).count(),
+        'payouts': PayoutRequest.objects.filter(status=PayoutStatus.PAYOUT_RESERVED).count(),
+    }
+
+
+@register.inclusion_tag('admin/aso_nav.html', takes_context=True)
+def aso_nav(context):
+    request = context.get('request')
+    user = getattr(request, 'user', None)
+    if not (user and user.is_active and user.is_staff):
+        return {'items': []}
+    path = request.path
+    admin_root = reverse('admin:index')
+    current = None
+    if path.startswith(admin_root):
+        app = path[len(admin_root):].split('/', 1)[0]
+        current = _SECTION.get(app)
+    try:
+        counts = _waiting_counts()
+    except Exception:  # never let a count break navigation
+        counts = {}
+    items = [{'label': 'Home', 'url': admin_root, 'active': path == admin_root}]
+    for app, model, label in _NAV:
+        if not user.has_perm(f'{app}.view_{model}'):
+            continue
+        items.append({'label': label, 'url': reverse(f'admin:{app}_{model}_changelist'),
+                      'active': current == app, 'count': counts.get(app, 0)})
+    return {'items': items}

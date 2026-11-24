@@ -96,3 +96,29 @@ class AdminPagesTests(TestCase):
         res = self.client.get(reverse('admin:login'))
         self.assertEqual(res.status_code, 200)
         self.assertIn('aso_admin/admin.css', res.content.decode())
+
+    def test_every_page_has_section_navigation_with_waiting_counts(self):
+        res = self.client.get(reverse('admin:orders_order_changelist'))
+        html = res.content.decode()
+        self.assertIn('class="aso-nav"', html)
+        self.assertIn('aria-current="page">Orders', html)  # the section you are in is marked
+        self.assertIn('<h1>Orders</h1>', html)            # not "Select order to change"
+        self.assertIn('aso-nav__count', html)             # 1 paid order waiting
+
+    def test_order_page_is_readable(self):
+        self.order.shipping_address_snapshot = {'full_name': 'Kemi Adebayo', 'phone_number': '08030000001',
+                                                'street_address': '1 Allen Avenue', 'city': 'Ikeja',
+                                                'state': 'Lagos'}
+        self.order.save()
+        res = self.client.get(reverse('admin:orders_order_change', args=[self.order.pk]))
+        self.assertContains(res, '₦185,000')
+        self.assertContains(res, '1 Allen Avenue, Ikeja, Lagos')
+        self.assertContains(res, 'https://wa.me/2348030000001')   # shopper
+        self.assertContains(res, 'https://wa.me/2348031234567')   # designer
+        self.assertContains(res, 'Designer must accept by')
+        self.assertNotContains(res, 'Subtotal kobo')
+
+    def test_orders_cannot_be_added_or_deleted_by_hand(self):
+        self.assertEqual(self.client.get(reverse('admin:orders_order_add')).status_code, 403)
+        self.assertEqual(
+            self.client.get(reverse('admin:orders_order_delete', args=[self.order.pk])).status_code, 403)

@@ -1,5 +1,18 @@
 {% extends "admin/index.html" %}
 {% load aso_admin %}
 
-{# "Today at Aso", then what needs attention, full width above the app list and "Recent actions". #}
-{% block content_title %}{{ block.super }}{% aso_dashboard %}{% endblock %}
+{# The home page: what needs doing today, then shortcuts. The full technical list is folded away. #}
+{% block nav-breadcrumbs %}{% aso_nav %}{% endblock %}
+
+{% block content_title %}<h1>{{ title }}</h1>{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  {% aso_dashboard %}
+
+  <details class="aso-all">
+    <summary>All records <small>Every table in the database, for the rare lookup</small></summary>
+    {% include "admin/app_list.html" with app_list=app_list show_changelinks=False %}
+  </details>
+</div>
+{% endblock %}

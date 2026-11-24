@@ -32,6 +32,9 @@ class DeliveryAdmin(admin.ModelAdmin):
     ]
     actions = ['mark_in_transit', 'mark_delivered']
 
+    def has_add_permission(self, request):
+        return False  # created by the site, not by hand
+
     @admin.action(description="Mark selected deliveries as In Transit (Out for Delivery)")
     def mark_in_transit(self, request, queryset):
         from .services import update_delivery_status

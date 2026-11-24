@@ -29,3 +29,14 @@ def thumb(url, size=56):
     if not url:
         return format_html('<span class="aso-thumb aso-thumb--empty" style="width:{0}px;height:{0}px">—</span>', size)
     return format_html('<img class="aso-thumb" src="{}" width="{}" height="{}" alt="" loading="lazy">', url, size, size)
+
+
+def whatsapp_link(phone):
+    """Phone number plus a one-tap WhatsApp link (Nigerian numbers: 080... -> 23480...)."""
+    if not phone:
+        return '—'
+    digits = ''.join(ch for ch in str(phone) if ch.isdigit())
+    if digits.startswith('0') and len(digits) == 11:
+        digits = '234' + digits[1:]
+    return format_html('{} &nbsp;<a class="aso-wa" href="https://wa.me/{}" target="_blank" rel="noopener">WhatsApp</a>',
+                       phone, digits)

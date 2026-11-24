@@ -86,6 +86,7 @@ class PayoutRequestAdmin(admin.ModelAdmin):
     list_filter = ('status', 'created_at')
     actions = [approve_and_send_payouts, reject_payouts]
     search_fields = ('reference', 'vendor__store_name', 'transfer_code', 'bank_account__account_number')
+    search_help_text = 'Search by studio name, reference or account number'
     readonly_fields = ('created_at', 'updated_at')
     list_select_related = ('vendor', 'bank_account')
     date_hierarchy = 'created_at'
