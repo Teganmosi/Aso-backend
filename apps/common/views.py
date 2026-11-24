@@ -1,6 +1,13 @@
+import mimetypes
+
 from django.conf import settings
 from django.views.static import serve
 from rest_framework import permissions, status
+
+# The server image's MIME table doesn't know .webp/.avif, so uploads were sent as
+# application/octet-stream; with "nosniff" some browsers then refuse to show them.
+mimetypes.add_type('image/webp', '.webp')
+mimetypes.add_type('image/avif', '.avif')
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
