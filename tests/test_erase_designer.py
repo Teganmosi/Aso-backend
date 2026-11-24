@@ -87,3 +87,34 @@ class EraseDesignerTests(TestCase):
     def test_warns_when_a_paid_order_is_still_open(self):
         Order.objects.filter(pk=self.order.pk).update(order_status=OrderStatus.PAID)
         self.assertContains(self.post_action(), 'paid or in progress')
+
+    def test_delete_test_studio_completely(self):
+        from apps.payouts.models import LedgerEntry, LedgerEntryType
+        LedgerEntry.objects.create(vendor=self.vendor, amount_kobo=4_250_000,
+                                   entry_type=LedgerEntryType.EARNING_PENDING, order=self.order)
+        self.assertContains(self.post_action(), 'Delete test studio completely')
+        self.post_action(delete_test_confirmed='1', confirm_text='nope')
+        self.assertTrue(VendorProfile.objects.filter(pk=self.vendor.pk).exists())
+
+        self.post_action(delete_test_confirmed='1', confirm_text='DELETE')
+        self.assertFalse(VendorProfile.objects.filter(pk=self.vendor.pk).exists())
+        self.assertFalse(User.objects.filter(email='arike@example.com').exists())
+        self.assertFalse(Order.objects.filter(pk=self.order.pk).exists())
+        self.assertFalse(Product.objects.filter(pk=self.product.pk).exists())
+        self.assertFalse(LedgerEntry.objects.filter(vendor_id=self.vendor.pk).exists())
+        self.assertTrue(User.objects.filter(email='kemi@aso.test').exists())  # the shopper is untouched
+
+    def test_studio_with_a_real_payout_is_not_deleted(self):
+        from apps.payouts.models import PayoutRequest, PayoutStatus
+        PayoutRequest.objects.create(vendor=self.vendor, amount_kobo=1_000_000, reference='ASO-PAY-9',
+                                     bank_account=self.vendor.bank_account, status=PayoutStatus.SUCCESSFUL)
+        self.post_action(delete_test_confirmed='1', confirm_text='DELETE')
+        self.assertTrue(VendorProfile.objects.filter(pk=self.vendor.pk).exists())
+        self.assertTrue(Order.objects.filter(pk=self.order.pk).exists())
+
+    def test_unsent_test_payout_request_does_not_block(self):
+        from apps.payouts.models import PayoutRequest, PayoutStatus
+        PayoutRequest.objects.create(vendor=self.vendor, amount_kobo=1_000_000, reference='ASO-PAY-8',
+                                     bank_account=self.vendor.bank_account, status=PayoutStatus.PAYOUT_RESERVED)
+        self.post_action(delete_test_confirmed='1', confirm_text='DELETE')
+        self.assertFalse(VendorProfile.objects.filter(pk=self.vendor.pk).exists())

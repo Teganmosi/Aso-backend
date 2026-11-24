@@ -61,13 +61,31 @@ def remove_from_home_page(modeladmin, request, queryset):
     modeladmin.message_user(request, f'{count} studio(s) removed from the home page picks.')
 
 
-@admin.action(description='Erase personal data… (closes the account; keeps order records)')
+@admin.action(description='Erase personal data or delete a test studio…')
 def erase_personal_data(modeladmin, request, queryset):
     from django.template.response import TemplateResponse
     from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
     from .services import designer_erase_summary, erase_designer_personal_data
 
     studios = list(queryset.select_related('user'))
+    if request.POST.get('delete_test_confirmed'):
+        from .services import delete_test_studio
+        if request.POST.get('confirm_text', '').strip().upper() != 'DELETE':
+            modeladmin.message_user(request, 'Type DELETE to confirm. Nothing was changed.', level=messages.ERROR)
+            return None
+        done, refused = 0, []
+        for v in studios:
+            name = v.store_name
+            try:
+                delete_test_studio(v)
+                done += 1
+            except ValidationError as exc:
+                refused.append(f'{name}: {exc.detail[0] if isinstance(exc.detail, list) else exc.detail}')
+        if done:
+            modeladmin.message_user(request, f'{done} test studio(s) deleted completely, with their orders and account.')
+        for msg in refused:
+            modeladmin.message_user(request, msg, level=messages.ERROR)
+        return None
     if request.POST.get('erase_confirmed'):
         if request.POST.get('confirm_text', '').strip().upper() != 'ERASE':
             modeladmin.message_user(request, 'Type ERASE to confirm. Nothing was changed.', level=messages.ERROR)

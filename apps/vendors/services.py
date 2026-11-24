@@ -253,3 +253,50 @@ def erase_designer_personal_data(vendor: VendorProfile) -> dict:
 
     invalidate_product_caches()
     return summary
+
+
+@transaction.atomic
+def delete_test_studio(vendor: VendorProfile) -> None:
+    """
+    Delete a studio that only ever had test activity: its orders (with their payment,
+    delivery and chat records and the designer earnings they created), pieces, photos,
+    bank details and the owner's account. Refuses if a payout was ever sent (or is being
+    sent) to the designer, because that is a real transfer that must stay on record.
+    """
+    from django.core.files.storage import default_storage
+    from apps.orders.models import Order
+    from apps.payouts.models import LedgerEntry, PayoutRequest
+    from apps.products.models import ProductMedia
+    from apps.products.services import invalidate_product_caches
+
+    from apps.payouts.models import PayoutStatus
+    if PayoutRequest.objects.filter(vendor=vendor,
+                                    status__in=[PayoutStatus.SUCCESSFUL, PayoutStatus.PROCESSING]).exists():
+        raise ValidationError('Money has been paid out to this designer, so the studio cannot be deleted. '
+                              'Use "Erase personal data" instead.')
+    user = vendor.user
+
+    def drop_file(url):
+        if url and str(url).startswith('/media/'):
+            try:
+                name = str(url)[len('/media/'):]
+                if default_storage.exists(name):
+                    default_storage.delete(name)
+            except Exception:
+                pass
+
+    for m in ProductMedia.objects.filter(product__vendor=vendor):
+        drop_file(m.url)
+        drop_file(m.thumbnail_url)
+    drop_file(vendor.logo_url)
+    drop_file(vendor.banner_url)
+
+    LedgerEntry.objects.filter(vendor=vendor).delete()
+    PayoutRequest.objects.filter(vendor=vendor).delete()  # only unsent requests are left at this point
+    Order.objects.filter(vendor=vendor).delete()  # items, payments, delivery and chat go with them
+    if Order.objects.filter(customer=user).exists():
+        # They also bought something as a shopper: keep that account, remove the studio only.
+        vendor.delete()
+    else:
+        user.delete()  # studio, pieces, bank details, addresses and carts go with the account
+    invalidate_product_caches()

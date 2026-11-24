@@ -44,5 +44,23 @@
       <a href="{% url 'admin:vendors_vendorprofile_changelist' %}" class="button cancel-link">Cancel</a>
     </div>
   </form>
+
+  <hr class="aso-erase-divider">
+  <h2 class="aso-erase-h2">Or: everything here was a test</h2>
+  <p>If the studio was set up for testing and its orders were your own test orders, delete it completely:
+     the orders (with their payment, delivery and chat records and the designer earnings they created), the
+     studio, pieces, photos, bank details and the account. Nothing is kept. Refused if money was ever paid out
+     to the designer.</p>
+  <form method="post">
+    {% csrf_token %}
+    {% for pk in selected %}<input type="hidden" name="_selected_action" value="{{ pk }}">{% endfor %}
+    <input type="hidden" name="action" value="{{ action }}">
+    <input type="hidden" name="delete_test_confirmed" value="1">
+    <label for="delete-confirm" class="aso-takedown__label">Type DELETE to confirm</label>
+    <input id="delete-confirm" name="confirm_text" autocomplete="off" required style="max-width:220px">
+    <div class="submit-row">
+      <input type="submit" class="default aso-danger" value="Delete test studio completely">
+    </div>
+  </form>
 </div>
 {% endblock %}
