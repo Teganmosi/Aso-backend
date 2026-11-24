@@ -103,6 +103,10 @@ class Product(UUIDModel):
         default=ProductStatus.DRAFT
     )
     is_active = models.BooleanField(default=True)
+    is_featured = models.BooleanField(
+        default=False, db_index=True, verbose_name='Show on home page',
+        help_text='Picked by Aso for "Curated for you" on the home page. Picked pieces show first.',
+    )
     rejection_reason = models.TextField(null=True, blank=True, verbose_name='Reason (emailed to the designer)')
 
     average_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)

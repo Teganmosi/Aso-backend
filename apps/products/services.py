@@ -358,3 +358,5 @@ def invalidate_product_caches():
         cache.delete_many(PUBLIC_LIST_CACHE_KEYS)
     except Exception:
         pass
+    from apps.products.home_feed import invalidate_home_feed
+    invalidate_home_feed()

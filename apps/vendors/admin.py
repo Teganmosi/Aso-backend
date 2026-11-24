@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.db.models import Count
 from django.utils.html import format_html
 from apps.common.admin_display import badge, whatsapp_link
+from apps.products.services import invalidate_product_caches
 from rest_framework.exceptions import ValidationError
 from .models import VendorProfile, BankAccount, VendorStatus
 from .services import approve_verification, reject_verification
@@ -45,11 +46,26 @@ def reject_identity_verification(modeladmin, request, queryset):
     modeladmin.message_user(request, f"{count} verification request(s) rejected; designers have been notified.")
 
 
+@admin.action(description='★ Show on home page ("Featured designers")')
+def show_on_home_page(modeladmin, request, queryset):
+    count = queryset.update(is_featured=True)
+    invalidate_product_caches()
+    modeladmin.message_user(request, f'{count} studio(s) picked for the home page. A studio only shows '
+                                     'once it has at least one live piece.')
+
+
+@admin.action(description='Remove from home page')
+def remove_from_home_page(modeladmin, request, queryset):
+    count = queryset.update(is_featured=False)
+    invalidate_product_caches()
+    modeladmin.message_user(request, f'{count} studio(s) removed from the home page picks.')
+
+
 @admin.register(VendorProfile)
 class VendorProfileAdmin(admin.ModelAdmin):
-    list_display = ('store_name', 'owner', 'location', 'studio_badge', 'identity_badge',
+    list_display = ('store_name', 'owner', 'location', 'studio_badge', 'identity_badge', 'home_pick',
                     'verification_submitted_at', 'pieces', 'bank', 'created_at')
-    list_filter = ('verification_status', 'status', 'kyc_tier', 'is_verified', 'state', 'city')
+    list_filter = ('verification_status', 'is_featured', 'status', 'kyc_tier', 'is_verified', 'state', 'city')
     list_select_related = ('user', 'bank_account')
     ordering = ('-created_at',)
     list_per_page = 50
@@ -57,7 +73,7 @@ class VendorProfileAdmin(admin.ModelAdmin):
     search_help_text = 'Search by studio, owner name, email, Instagram, NIN or CAC'
     prepopulated_fields = {'slug': ('store_name',)}
     autocomplete_fields = ('user',)
-    actions = [approve_identity_verification, reject_identity_verification, approve_vendors, reject_vendors]
+    actions = [show_on_home_page, remove_from_home_page, approve_identity_verification, reject_identity_verification, approve_vendors, reject_vendors]
     # The badge can only change through the review actions above (which keep an audit trail).
     readonly_fields = ('is_verified', 'kyc_tier', 'verification_status', 'verification_submitted_at',
                        'verification_reviewed_at', 'verification_reviewed_by', 'created_at', 'updated_at',
@@ -93,7 +109,7 @@ class VendorProfileAdmin(admin.ModelAdmin):
     def verified_badge(self, obj):
         return badge('VERIFIED' if obj.is_verified else '', 'Shows the badge' if obj.is_verified else 'No badge')
     fieldsets = [
-        ('Studio', {'fields': ['store_name', 'slug', 'status', 'description', 'instagram_handle', 'pieces_link']}),
+        ('Studio', {'fields': ['store_name', 'slug', 'status', 'is_featured', 'description', 'instagram_handle', 'pieces_link']}),
         ('Owner and pickup', {'fields': ['user', 'owner_contact', 'workshop_address', 'landmark', 'city', 'state']}),
         ('Identity check (NIN/CAC)', {
             'description': 'To approve or reject, tick the studio on the designers list and pick the action. '
@@ -104,6 +120,14 @@ class VendorProfileAdmin(admin.ModelAdmin):
         ('Logo and banner', {'classes': ['collapse'], 'fields': ['logo_url', 'banner_url']}),
         ('Dates', {'classes': ['collapse'], 'fields': ['created_at', 'updated_at']}),
     ]
+
+    @admin.display(description='Home page', ordering='is_featured')
+    def home_pick(self, obj):
+        return badge('APPROVED', '★ Picked') if obj.is_featured else ''
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        invalidate_product_caches()  # home page picks and the designer list update right away
 
     @admin.display(description='Contact')
     def owner_contact(self, obj):

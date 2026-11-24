@@ -42,6 +42,10 @@ class VendorProfile(UUIDModel):
     status = models.CharField(max_length=20, choices=VendorStatus.choices, default=VendorStatus.PENDING)
     kyc_tier = models.CharField(max_length=30, choices=KYCTier.choices, default=KYCTier.TIER_1_STARTER)
     is_verified = models.BooleanField(default=False)
+    is_featured = models.BooleanField(
+        default=False, db_index=True, verbose_name='Show on home page',
+        help_text='Picked by Aso for "Featured designers" on the home page. Picked studios show first.',
+    )
     
     # Verification & Pickup Location Fields
     instagram_handle = models.CharField(max_length=100, null=True, blank=True)

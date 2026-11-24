@@ -283,3 +283,7 @@ textarea.vLargeTextField { height: 96px; min-height: 64px; resize: vertical; }
 @media (max-width: 767px) {
   .xfull, .toplinks, .date-hierarchy { display: none; }
 }
+
+a.aso-stat--link { text-decoration: none !important; color: inherit !important; border: 1px solid transparent; }
+a.aso-stat--link:hover { border-color: var(--aso-gold); }
+a.aso-stat--link strong { font-size: 16px; }

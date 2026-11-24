@@ -18,7 +18,8 @@
 
   <div class="aso-stats">
     {% for s in stats %}
-      <div class="aso-stat"><span>{{ s.label }}</span><strong>{{ s.value }}</strong></div>
+      {% if s.url %}<a class="aso-stat aso-stat--link" href="{{ s.url }}"><span>{{ s.label }}</span><strong>{{ s.value }}</strong></a>
+      {% else %}<div class="aso-stat"><span>{{ s.label }}</span><strong>{{ s.value }}</strong></div>{% endif %}
     {% endfor %}
   </div>
 </section>

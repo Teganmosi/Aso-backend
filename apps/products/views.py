@@ -113,7 +113,7 @@ class PublicProductListView(APIView):
 
         # Check if default unfiltered home catalog query for instant Redis retrieval
         is_default_query = not any([search, category_slug, collection_slug, vendor_slug, min_price, max_price, min_lead_time, max_lead_time, sort_by])
-        cache_key = "aso_public_products_default_v2" if is_default_query else None
+        cache_key = "aso_public_products_default_v2" if is_default_query and not request.query_params.get('page') else None
 
         if cache_key:
             cached = cache.get(cache_key)
@@ -131,6 +131,20 @@ class PublicProductListView(APIView):
             max_lead_time=max_lead_time,
             sort_by=sort_by
         )
+
+        # Page-by-page loading (?page=1&page_size=24). Without ?page the full list is returned,
+        # as before, for pages that still filter in the browser.
+        if request.query_params.get('page'):
+            try:
+                page = max(1, int(request.query_params.get('page')))
+                size = min(48, max(1, int(request.query_params.get('page_size') or 24)))
+            except (TypeError, ValueError):
+                page, size = 1, 24
+            total = products.count()
+            start = (page - 1) * size
+            items = ProductListSerializer(products[start:start + size], many=True).data
+            return Response({'success': True, 'count': total, 'page': page, 'page_size': size,
+                             'has_more': start + size < total, 'products': items})
 
         serializer = ProductListSerializer(products, many=True)
         response_data = {
@@ -559,3 +573,12 @@ class FitFeedbackView(APIView):
             'id': str(feedback.id),
             'deltas': deltas
         }, status=status.HTTP_201_CREATED)
+
+
+class HomeFeedView(APIView):
+    """The home page selection: hand-picked first, then a fair daily mix (see home_feed.py)."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        from apps.products.home_feed import build_home_feed
+        return Response(build_home_feed())

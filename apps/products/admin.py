@@ -59,18 +59,19 @@ class ProductAdmin(admin.ModelAdmin):
         'category',
         'price',
         'review_badge',
+        'home_pick',
         'status',
         'is_active',
         'created_at'
     ]
     list_display_links = ['photo', 'title']
-    list_filter = ['approval_status', 'status', 'created_at', 'is_active', 'category', 'vendor']
+    list_filter = ['approval_status', 'is_featured', 'status', 'created_at', 'is_active', 'category', 'vendor']
     date_hierarchy = 'created_at'
     search_fields = ['title', 'slug', 'vendor__store_name', 'description']
     search_help_text = 'Search by piece name or studio name'
     prepopulated_fields = {'slug': ('title',)}
     inlines = [ProductVariantInline, ProductMediaInline]
-    actions = ['approve_selected_products', 'reject_selected_products']
+    actions = ['show_on_home_page', 'remove_from_home_page', 'approve_selected_products', 'reject_selected_products']
     list_select_related = ['vendor', 'category']
     ordering = ['-created_at']
     list_per_page = 40
@@ -80,7 +81,7 @@ class ProductAdmin(admin.ModelAdmin):
             'description': 'Pieces go live as soon as the designer saves them. To take one down, set "Shop" '
                            'to "Taken down", write why, and save: the designer is emailed, and the piece goes '
                            'live again when they save a fix.',
-            'fields': ['photos_preview', 'approval_status', 'rejection_reason', 'status', 'is_active'],
+            'fields': ['photos_preview', 'approval_status', 'rejection_reason', 'status', 'is_active', 'is_featured'],
         }),
         ('The piece', {
             'fields': ['vendor', 'category', 'title', 'slug', 'description',
@@ -126,6 +127,27 @@ class ProductAdmin(admin.ModelAdmin):
         if obj.approval_status == ApprovalStatus.APPROVED and obj.status != ProductStatus.PUBLISHED:
             return badge('PENDING', 'Draft (designer)')
         return badge(obj.approval_status, obj.get_approval_status_display())
+
+    @admin.display(description='Home page', ordering='is_featured')
+    def home_pick(self, obj):
+        return badge('APPROVED', '★ Picked') if obj.is_featured else ''
+
+    @admin.action(description='★ Show on home page ("Curated for you")')
+    def show_on_home_page(self, request, queryset):
+        count = queryset.update(is_featured=True)
+        invalidate_product_caches()
+        live = queryset.filter(approval_status=ApprovalStatus.APPROVED, status=ProductStatus.PUBLISHED,
+                               is_active=True).count()
+        msg = f'{count} piece(s) picked for the home page.'
+        if live < count:
+            msg += f' {count - live} of them are not live, so they will not show until they are.'
+        self.message_user(request, msg)
+
+    @admin.action(description='Remove from home page')
+    def remove_from_home_page(self, request, queryset):
+        count = queryset.update(is_featured=False)
+        invalidate_product_caches()
+        self.message_user(request, f'{count} piece(s) removed from the home page picks.')
 
     @admin.action(description="Put back live (designer is emailed)")
     def approve_selected_products(self, request, queryset):

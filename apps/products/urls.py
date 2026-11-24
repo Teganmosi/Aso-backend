@@ -13,13 +13,15 @@ from apps.products.views import (
     ProductVariantDetailView,
     ProductMediaListCreateView,
     ProductMediaDetailView,
-    ProductReviewListCreateView
+    ProductReviewListCreateView,
+    HomeFeedView,
 )
 
 urlpatterns = [
     # PRD v2.0 Intelligent Fit Estimator Endpoints
     path('fit/estimate/', FitEstimateView.as_view(), name='fit-estimate'),
     path('fit/feedback/', FitFeedbackView.as_view(), name='fit-feedback'),
+    path('home/', HomeFeedView.as_view(), name='home-feed'),
     # Category Endpoints
     path('categories/', CategoryListView.as_view(), name='category-list'),
     path('categories/<slug:slug>/', CategoryDetailView.as_view(), name='category-detail'),

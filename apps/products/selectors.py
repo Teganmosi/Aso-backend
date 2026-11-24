@@ -41,6 +41,35 @@ def _public_product_qs():
     ).select_related('vendor', 'category').prefetch_related('media', 'variants')
 
 
+# Home-page category pills. A pill matches its real category (and sub-categories) when one
+# exists with that slug, plus pieces whose category name or title uses one of these words.
+# Words are chosen so "men" never matches "women".
+PILL_KEYWORDS = {
+    'men': ["men's", 'agbada', 'senator', 'kaftan', 'groom'],
+    'agbada': ['agbada'],
+    'senator': ['senator'],
+    'two-piece': ['two-piece', 'two piece', '2-piece'],
+    'women': ["women's", 'gown', 'boubou', 'corset', 'iro and buba', 'iro & buba', 'bridal'],
+    'aso-ebi': ['aso ebi', 'aso-ebi', 'asoebi', 'corset'],
+    'boubou': ['boubou', 'bubu'],
+    'iro-buba': ['iro and buba', 'iro & buba', 'buba'],
+    'traditional': ['traditional', 'bridal', 'native', 'wedding', 'aso-oke', 'aso oke'],
+}
+_PILL_ROOTS = {'men': ['men', 'mens'], 'women': ['women', 'womens'],
+               'traditional': ['traditional', 'traditional-heritage', 'traditional-bridal']}
+
+
+def filter_by_pill(qs, slug: str):
+    slug = (slug or '').strip().lower()
+    cat_slugs = [slug] + _PILL_ROOTS.get(slug, [])
+    cats = list(Category.objects.filter(slug__in=cat_slugs, is_active=True).values_list('id', flat=True))
+    cat_ids = cats + list(Category.objects.filter(parent_id__in=cats, is_active=True).values_list('id', flat=True))
+    q = Q(category_id__in=cat_ids) if cat_ids else Q()
+    for word in PILL_KEYWORDS.get(slug, [slug.replace('-', ' ')]):
+        q |= Q(category__name__icontains=word) | Q(title__icontains=word)
+    return qs.filter(q)
+
+
 def get_public_products(
     search=None,
     category_slug=None,
@@ -86,7 +115,8 @@ def get_public_products(
             category_ids = [category.id] + child_ids
             qs = qs.filter(category_id__in=category_ids)
         except Category.DoesNotExist:
-            qs = Product.objects.none()
+            # Home-page pills ("agbada", "two-piece"...) are not always real categories.
+            qs = filter_by_pill(qs, category_slug).distinct()
 
     # Vendor filter (supports vendor slug or vendor UUID)
     if vendor_slug:

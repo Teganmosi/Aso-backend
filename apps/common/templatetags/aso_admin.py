@@ -82,6 +82,10 @@ def aso_dashboard(context):
         {'label': 'Sales, last 7 days', 'value': naira(week.aggregate(s=Sum('total_amount_kobo'))['s'] or 0)},
         {'label': 'Live pieces', 'value': Product.objects.filter(approval_status=ApprovalStatus.APPROVED, is_active=True).count()},
         {'label': 'Designers', 'value': VendorProfile.objects.count()},
+        {'label': 'Picked for the home page',
+         'value': f"{Product.objects.filter(is_featured=True).count()} pieces · "
+                  f"{VendorProfile.objects.filter(is_featured=True).count()} studios",
+         'url': link(Product, 'is_featured__exact=1')},
     ]
     return {'tasks': tasks, 'stats': stats, 'all_clear': not any(t['count'] for t in tasks)}
 
