@@ -287,3 +287,4 @@ textarea.vLargeTextField { height: 96px; min-height: 64px; resize: vertical; }
 a.aso-stat--link { text-decoration: none !important; color: inherit !important; border: 1px solid transparent; }
 a.aso-stat--link:hover { border-color: var(--aso-gold); }
 a.aso-stat--link strong { font-size: 16px; }
+.aso-erase-warning { padding: 10px 12px; border-radius: 8px; background: #FEE2E2; color: #991B1B; font-weight: 600; }

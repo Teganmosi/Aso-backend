@@ -1,0 +1,48 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">Home</a> ›
+  <a href="{% url 'admin:vendors_vendorprofile_changelist' %}">Designer studios</a> › Erase personal data
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="aso-takedown">
+  <p>This removes everything that identifies the person behind {{ rows|length|pluralize:"this studio,these studios" }}.
+     It <strong>cannot be undone</strong>.</p>
+
+  <ul class="aso-takedown__list">
+    {% for r in rows %}
+      <li><strong>{{ r.studio.store_name }}</strong> · {{ r.studio.user.email }}
+        <br><small>{{ r.summary.pieces }} piece{{ r.summary.pieces|pluralize }} · {{ r.summary.orders }} order{{ r.summary.orders|pluralize }}{% if r.summary.live_orders %} · <span class="aso-late">{{ r.summary.live_orders }} paid or in progress</span>{% endif %}</small></li>
+    {% endfor %}
+  </ul>
+
+  <p><strong>Removed:</strong> name, email, phone and password; studio name, description, Instagram, address,
+     NIN/CAC, logo and banner; bank details; saved addresses; chat messages they sent; piece photos and text.
+     The account is closed and the studio disappears from the site. Their email address is freed, so they can
+     sign up again later.</p>
+  <p><strong>Kept:</strong> order records and amounts (with the piece names as bought), so payments and
+     accounts still add up.</p>
+
+  {% if any_live_orders %}
+  <p class="aso-erase-warning">A shopper has paid for an order from this studio that isn't finished. Sort that
+     order out (refund or cancel it) before erasing, because you won't be able to contact the designer from here
+     afterwards.</p>
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}
+    {% for pk in selected %}<input type="hidden" name="_selected_action" value="{{ pk }}">{% endfor %}
+    <input type="hidden" name="action" value="{{ action }}">
+    <input type="hidden" name="erase_confirmed" value="1">
+    <label for="erase-confirm" class="aso-takedown__label">Type ERASE to confirm</label>
+    <input id="erase-confirm" name="confirm_text" autocomplete="off" required style="max-width:220px">
+    <div class="submit-row">
+      <input type="submit" class="default" value="Erase personal data">
+      <a href="{% url 'admin:vendors_vendorprofile_changelist' %}" class="button cancel-link">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

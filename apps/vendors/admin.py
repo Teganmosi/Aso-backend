@@ -61,6 +61,35 @@ def remove_from_home_page(modeladmin, request, queryset):
     modeladmin.message_user(request, f'{count} studio(s) removed from the home page picks.')
 
 
+@admin.action(description='Erase personal data… (closes the account; keeps order records)')
+def erase_personal_data(modeladmin, request, queryset):
+    from django.template.response import TemplateResponse
+    from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
+    from .services import designer_erase_summary, erase_designer_personal_data
+
+    studios = list(queryset.select_related('user'))
+    if request.POST.get('erase_confirmed'):
+        if request.POST.get('confirm_text', '').strip().upper() != 'ERASE':
+            modeladmin.message_user(request, 'Type ERASE to confirm. Nothing was changed.', level=messages.ERROR)
+            return None
+        for v in studios:
+            erase_designer_personal_data(v)
+        modeladmin.message_user(request, f'{len(studios)} studio(s) erased: personal details, photos and bank '
+                                         'details removed and the account closed. Their email can now be used '
+                                         'to sign up again.')
+        return None
+    rows = [{'studio': v, 'summary': designer_erase_summary(v)} for v in studios]
+    return TemplateResponse(request, 'admin/aso_erase_designer.html', {
+        **modeladmin.admin_site.each_context(request),
+        'title': 'Erase personal data',
+        'rows': rows,
+        'any_live_orders': any(r['summary']['live_orders'] for r in rows),
+        'selected': request.POST.getlist(ACTION_CHECKBOX_NAME),
+        'action': 'erase_personal_data',
+        'opts': modeladmin.model._meta,
+    })
+
+
 @admin.register(VendorProfile)
 class VendorProfileAdmin(admin.ModelAdmin):
     list_display = ('store_name', 'owner', 'location', 'studio_badge', 'identity_badge', 'home_pick',
@@ -73,7 +102,8 @@ class VendorProfileAdmin(admin.ModelAdmin):
     search_help_text = 'Search by studio, owner name, email, Instagram, NIN or CAC'
     prepopulated_fields = {'slug': ('store_name',)}
     autocomplete_fields = ('user',)
-    actions = [show_on_home_page, remove_from_home_page, approve_identity_verification, reject_identity_verification, approve_vendors, reject_vendors]
+    actions = [show_on_home_page, remove_from_home_page, approve_identity_verification, reject_identity_verification, approve_vendors, reject_vendors,
+               erase_personal_data]
     # The badge can only change through the review actions above (which keep an audit trail).
     readonly_fields = ('is_verified', 'kyc_tier', 'verification_status', 'verification_submitted_at',
                        'verification_reviewed_at', 'verification_reviewed_by', 'created_at', 'updated_at',

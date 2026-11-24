@@ -136,3 +136,120 @@ def reject_verification(vendor: VendorProfile, reviewer, reason: str = '') -> Ve
     ])
     send_verification_decision_notification(vendor)
     return vendor
+
+
+# Order states where a shopper's money is (or was) with Aso and the order still matters.
+_LIVE_ORDER_STATES = {'PAID', 'VENDOR_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP', 'PICKED_UP',
+                      'OUT_FOR_DELIVERY', 'DELIVERED', 'DISPUTED'}
+
+
+def designer_erase_summary(vendor: VendorProfile) -> dict:
+    """What erasing this studio would touch, for the confirmation page."""
+    orders = vendor.orders.all()
+    return {
+        'pieces': vendor.products.count(),
+        'orders': orders.count(),
+        'live_orders': orders.filter(order_status__in=_LIVE_ORDER_STATES).count(),
+    }
+
+
+@transaction.atomic
+def erase_designer_personal_data(vendor: VendorProfile) -> dict:
+    """
+    Remove a designer's personal data while keeping order and money records consistent.
+    Order rows cannot be deleted (they hold payment history), so instead everything that
+    identifies the person is wiped and the account is closed:
+      * account: name, phone, password; email replaced so the real one can sign up again
+      * studio: name, links, description, address, NIN/CAC, logo, banner; hidden from the site
+      * bank account details, saved addresses, chat messages they sent
+      * pieces: hidden, with photos deleted and text cleared (orders keep their own snapshots)
+    """
+    import uuid
+    from django.core.files.storage import default_storage
+    from apps.accounts.models import Address, EmailVerificationCode
+    from apps.orders.models import OrderMessage
+    from apps.products.models import ProductMedia, ProductStatus
+    from apps.products.services import invalidate_product_caches
+
+    tag = uuid.uuid4().hex[:10]
+    user = vendor.user
+    summary = designer_erase_summary(vendor)
+
+    def drop_file(url):
+        if url and str(url).startswith('/media/'):
+            name = str(url)[len('/media/'):]
+            try:
+                if default_storage.exists(name):
+                    default_storage.delete(name)
+            except Exception:
+                pass
+
+    # Pieces and their photos
+    media = ProductMedia.objects.filter(product__vendor=vendor)
+    for m in media:
+        drop_file(m.url)
+        drop_file(m.thumbnail_url)
+    media.delete()
+    for i, product in enumerate(vendor.products.all(), start=1):
+        product.title = f'Removed piece {i}'
+        product.slug = f'removed-{tag}-{i}'
+        product.description = ''
+        product.size_chart = {}
+        product.is_active = False
+        product.is_featured = False
+        product.status = ProductStatus.ARCHIVED
+        product.save()
+
+    # Studio
+    drop_file(vendor.logo_url)
+    drop_file(vendor.banner_url)
+    vendor.store_name = f'Removed studio {tag}'
+    vendor.slug = f'removed-{tag}'
+    vendor.description = None
+    vendor.logo_url = None
+    vendor.banner_url = None
+    vendor.city = ''
+    vendor.state = ''
+    vendor.instagram_handle = None
+    vendor.workshop_address = None
+    vendor.landmark = None
+    vendor.nin_number = None
+    vendor.cac_number = None
+    vendor.verification_rejection_reason = ''
+    vendor.is_verified = False
+    vendor.is_featured = False
+    vendor.status = VendorStatus.SUSPENDED
+    vendor.save()
+
+    # Bank details: delete, unless a payout record points at them (then blank them).
+    bank = getattr(vendor, 'bank_account', None)
+    if bank is not None:
+        if bank.payout_requests.exists():
+            bank.account_name = 'Removed'
+            bank.account_number = '0000000000'
+            bank.recipient_code = None
+            bank.save()
+        else:
+            bank.delete()
+
+    # Account
+    OrderMessage.objects.filter(sender=user).update(content='[removed]', original_content='[removed]')
+    Address.objects.filter(user=user).delete()
+    EmailVerificationCode.objects.filter(user=user).delete()
+    user.email = f'erased-{tag}@erased.invalid'
+    user.first_name = ''
+    user.last_name = ''
+    user.phone_number = None
+    user.is_active = False
+    user.set_unusable_password()
+    user.save()
+
+    # The admin history list shows old names; clear those too.
+    from django.contrib.admin.models import LogEntry
+    from django.contrib.contenttypes.models import ContentType
+    for obj, label in ((vendor, vendor.store_name), (user, user.email)):
+        LogEntry.objects.filter(content_type=ContentType.objects.get_for_model(obj),
+                                object_id=str(obj.pk)).update(object_repr=label, change_message='')
+
+    invalidate_product_caches()
+    return summary
