@@ -110,6 +110,8 @@ class ImageUploadTests(MediaStorageTestBase):
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
         self.assertIn('immutable', res['Cache-Control'])
+        # Must be labelled as an image: with nosniff, octet-stream can stop browsers showing it.
+        self.assertEqual(res['Content-Type'], 'image/webp')
         # Path traversal out of MEDIA_ROOT must never serve a file (Django answers 400 or 404).
         self.assertIn(self.client.get('/media/../config/settings/base.py').status_code, (400, 404))
 
