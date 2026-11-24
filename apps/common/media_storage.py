@@ -79,16 +79,22 @@ def _open_image(raw: bytes, max_bytes: int) -> Image.Image:
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
         raise InvalidImageError('This file is not a supported image. Please upload a JPG, PNG or WebP photo.') from exc
 
-    img = ImageOps.exif_transpose(img)  # rotate phone photos upright
-    # Flatten transparency onto white; WebP supports alpha but product photos look
-    # inconsistent on cards when some have transparent backgrounds.
-    if img.mode in ('RGBA', 'LA', 'P'):
-        rgba = img.convert('RGBA')
-        background = Image.new('RGB', rgba.size, (255, 255, 255))
-        background.paste(rgba, mask=rgba.split()[-1])
-        img = background
-    elif img.mode != 'RGB':
-        img = img.convert('RGB')
+    try:
+        img = ImageOps.exif_transpose(img)  # rotate phone photos upright
+    except Exception:  # some phones write broken EXIF; keep the photo as-is rather than fail
+        pass
+    try:
+        # Flatten transparency onto white; WebP supports alpha but product photos look
+        # inconsistent on cards when some have transparent backgrounds.
+        if img.mode in ('RGBA', 'LA', 'P', 'PA'):
+            rgba = img.convert('RGBA')
+            background = Image.new('RGB', rgba.size, (255, 255, 255))
+            background.paste(rgba, mask=rgba.split()[-1])
+            img = background
+        elif img.mode != 'RGB':
+            img = img.convert('RGB')  # CMYK, 16-bit and greyscale photos
+    except (OSError, ValueError) as exc:
+        raise InvalidImageError('This photo could not be processed. Please save it as a JPG and try again.') from exc
     return img
 
 

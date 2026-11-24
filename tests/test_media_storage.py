@@ -104,6 +104,28 @@ class ImageUploadTests(MediaStorageTestBase):
         res = self.upload(self.vendor_user, file=fake)
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_cmyk_photo_uploads(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        buf = io.BytesIO()
+        Image.new('CMYK', (800, 1000), (0, 80, 60, 10)).save(buf, format='JPEG')
+        res = self.upload(self.vendor_user, file=SimpleUploadedFile('print.jpg', buf.getvalue(), content_type='image/jpeg'))
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED, res.data)
+
+    def test_half_uploaded_photo_gets_a_message_not_a_crash(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        cut = make_jpeg(1200, 1600)[:4000]
+        res = self.upload(self.vendor_user, file=SimpleUploadedFile('cut.jpg', cut, content_type='image/jpeg'))
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('message', res.data)
+
+    def test_iphone_heic_gets_a_message_not_a_crash(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        # A HEIC file starts with an ftyp box; Pillow can't read it, so it must be a clear 400.
+        heic = b'\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic' + b'\x00' * 512
+        res = self.upload(self.vendor_user, file=SimpleUploadedFile('IMG_1234.HEIC', heic, content_type='image/heic'))
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('JPG', res.data['message'])
+
     def test_uploaded_file_is_served_with_long_cache(self):
         url = self.upload(self.vendor_user).data['url']
         self.client.force_authenticate(user=None)

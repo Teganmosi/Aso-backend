@@ -196,11 +196,13 @@ class ProductVariant(UUIDModel):
 
     def save(self, *args, **kwargs):
         if not self.sku:
+            # Built from the product's UUID (unique) and made unique with a counter. Callers must
+            # not invent their own SKUs: name-based ones collided and crashed uploads with a 500.
             v_code = str(self.product.vendor.id)[:6].upper()
-            p_code = str(self.product.id)[:6].upper()
-            size_code = slugify(self.size).upper() or "SZ"
-            color_code = slugify(self.color or "DEF").upper()
-            base_sku = f"ASO-{v_code}-{p_code}-{size_code}-{color_code}"
+            p_code = str(self.product.id)[:8].upper()
+            size_code = (slugify(self.size).upper() or "SZ")[:24]
+            color_code = slugify(self.color or "DEF").upper()[:24]
+            base_sku = f"ASO-{v_code}-{p_code}-{size_code}-{color_code}"[:90]
             
             sku = base_sku
             counter = 1
