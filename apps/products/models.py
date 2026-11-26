@@ -373,6 +373,24 @@ class FitFeedback(UUIDModel):
     )
     notes = models.TextField(null=True, blank=True)
 
+    # "Did it fit?" asked after delivery (Nov 2026).
+    fit_result = models.CharField(max_length=20, choices=[
+        ('GREAT', 'Fits well'),
+        ('TOO_SMALL', 'Too small / tight'),
+        ('TOO_BIG', 'Too big / loose'),
+        ('LENGTH', 'Length is off'),
+        ('OTHER', 'Something else'),
+    ], blank=True, default='', db_index=True)
+    problem_areas = models.JSONField(default=list, blank=True)
+    fit_source = models.CharField(max_length=20, choices=[
+        ('measured', 'Measured themselves'),
+        ('garment', 'Measured clothes that fit'),
+        ('estimate', 'Rough estimate'),
+        ('standard_size', 'Standard size'),
+    ], blank=True, default='', db_index=True,
+        help_text='How the order was sized: tells us which way of sizing works.')
+    size_ordered = models.CharField(max_length=50, blank=True, default='')
+
     class Meta:
         db_table = 'products_fitfeedback'
         ordering = ['-created_at']

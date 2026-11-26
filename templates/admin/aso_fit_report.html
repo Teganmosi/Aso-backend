@@ -1,0 +1,22 @@
+{% extends "admin/change_list.html" %}
+{% block result_list %}
+<div class="aso-fit-report">
+  <h2>Fit success, last 90 days</h2>
+  {% if fit_total %}
+    <p class="aso-fit-report__big"><strong>{{ fit_rate }}%</strong> of {{ fit_total }} piece{{ fit_total|pluralize }} fit well.</p>
+    <table>
+      <thead><tr><th>How it was sized</th><th>Answers</th><th>Fit well</th><th>Too small</th><th>Too big</th><th>Length off</th></tr></thead>
+      <tbody>
+      {% for r in fit_rows %}
+        <tr><td>{{ r.label }}</td><td>{{ r.total }}</td><td><strong>{{ r.rate }}%</strong></td><td>{{ r.small }}</td><td>{{ r.big }}</td><td>{{ r.length }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="aso-fit-report__hint">If "Rough estimate" fits much worse than "Measured", push shoppers to measure. If one
+       designer's pieces often run small, tell them. Click an answer below to see the measurements behind it.</p>
+  {% else %}
+    <p>No answers yet. Shoppers are asked "Did it fit?" once their order arrives.</p>
+  {% endif %}
+</div>
+{{ block.super }}
+{% endblock %}

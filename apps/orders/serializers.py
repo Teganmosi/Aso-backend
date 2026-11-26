@@ -28,6 +28,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
     unit_price_naira = serializers.FloatField(read_only=True)
     total_price_naira = serializers.FloatField(read_only=True)
     product_image = serializers.SerializerMethodField()
+    fit_feedback = serializers.SerializerMethodField()
 
     class Meta:
         model = OrderItem
@@ -45,9 +46,15 @@ class OrderItemSerializer(serializers.ModelSerializer):
             'total_price_kobo',
             'total_price_naira',
             'product_image',
+            'fit_feedback',
             'created_at'
         ]
         read_only_fields = fields
+
+    def get_fit_feedback(self, obj):
+        """The shopper's "Did it fit?" answer for this piece, or None."""
+        fb = next(iter(sorted(obj.fit_feedbacks.all(), key=lambda f: f.updated_at, reverse=True)), None)
+        return fb.fit_result if fb and fb.fit_result else None
 
     def get_product_image(self, obj) -> str:
         if obj.variant and obj.variant.product:

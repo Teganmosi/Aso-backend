@@ -228,3 +228,60 @@ class ReviewAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False  # created by the site, not by hand
 
+
+
+from apps.products.models import FitFeedback  # noqa: E402
+
+
+@admin.register(FitFeedback)
+class FitFeedbackAdmin(admin.ModelAdmin):
+    """Shoppers' "Did it fit?" answers, with a summary of fit success by how the order was sized."""
+    list_display = ['created_at', 'piece', 'result_badge', 'source', 'size_ordered', 'areas', 'notes']
+    list_filter = ['fit_result', 'fit_source', 'created_at']
+    search_fields = ['order_item__order__order_number', 'order_item__product_title_snapshot', 'notes']
+    list_select_related = ['order_item']
+    readonly_fields = [f.name for f in FitFeedback._meta.fields]
+    change_list_template = 'admin/aso_fit_report.html'
+    ordering = ['-created_at']
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.display(description='Piece')
+    def piece(self, obj):
+        item = obj.order_item
+        return f'{item.product_title_snapshot} · {item.order.order_number}' if item else '—'
+
+    @admin.display(description='Fit', ordering='fit_result')
+    def result_badge(self, obj):
+        tone = {'GREAT': 'APPROVED', 'TOO_SMALL': 'REJECTED', 'TOO_BIG': 'REJECTED', 'LENGTH': 'PENDING'}.get(obj.fit_result, '')
+        return badge(tone, obj.get_fit_result_display() or obj.get_tailor_feedback_display())
+
+    @admin.display(description='Sized by', ordering='fit_source')
+    def source(self, obj):
+        return obj.get_fit_source_display() or '—'
+
+    @admin.display(description='Problem areas')
+    def areas(self, obj):
+        return ', '.join(a.replace('_', ' ') for a in (obj.problem_areas or [])) or '—'
+
+    def changelist_view(self, request, extra_context=None):
+        from datetime import timedelta
+        from django.db.models import Count, Q
+        from django.utils import timezone
+        since = timezone.now() - timedelta(days=90)
+        qs = FitFeedback.objects.filter(created_at__gte=since).exclude(fit_result='')
+        rows = []
+        labels = dict(FitFeedback._meta.get_field('fit_source').choices)
+        for r in qs.values('fit_source').annotate(
+                total=Count('id'), great=Count('id', filter=Q(fit_result='GREAT')),
+                small=Count('id', filter=Q(fit_result='TOO_SMALL')), big=Count('id', filter=Q(fit_result='TOO_BIG')),
+                length=Count('id', filter=Q(fit_result='LENGTH'))).order_by('-total'):
+            r['label'] = labels.get(r['fit_source'], 'Unknown')
+            r['rate'] = round(100 * r['great'] / r['total']) if r['total'] else 0
+            rows.append(r)
+        total = sum(r['total'] for r in rows)
+        great = sum(r['great'] for r in rows)
+        extra_context = {**(extra_context or {}), 'fit_rows': rows, 'fit_total': total,
+                         'fit_rate': round(100 * great / total) if total else None}
+        return super().changelist_view(request, extra_context=extra_context)

@@ -16,26 +16,9 @@ from typing import Any, Dict, Optional
 
 VERSION = '2.0'
 
-MEN = {
-    #        chest  waist  hips  shoulder neck  thigh  bicep
-    'XS':  (34.0, 28.0, 34.0, 16.5, 14.0, 20.0, 11.5),
-    'S':   (37.0, 30.5, 37.0, 17.0, 14.75, 21.5, 12.25),
-    'M':   (40.0, 33.0, 40.0, 18.0, 15.5, 23.0, 13.0),
-    'L':   (43.0, 36.0, 43.0, 19.0, 16.25, 24.5, 14.0),
-    'XL':  (46.0, 39.5, 46.0, 20.0, 17.0, 26.0, 15.0),
-    'XXL': (49.0, 43.0, 49.0, 21.0, 18.0, 27.5, 16.0),
-    '3XL': (52.0, 46.5, 52.0, 22.0, 19.0, 29.0, 17.0),
-}
-WOMEN = {
-    #        bust  underbust waist  hips  shoulder thigh bicep
-    'XS':  (32.0, 27.0, 25.0, 35.0, 14.25, 20.5, 10.0),
-    'S':   (34.5, 29.0, 27.5, 37.5, 14.75, 22.0, 10.75),
-    'M':   (37.0, 31.5, 30.0, 40.5, 15.25, 23.5, 11.5),
-    'L':   (40.0, 34.0, 33.0, 43.5, 15.75, 25.0, 12.5),
-    'XL':  (43.0, 37.0, 36.5, 47.0, 16.25, 27.0, 13.75),
-    'XXL': (46.0, 40.0, 40.0, 50.0, 16.75, 28.5, 15.0),
-    '3XL': (49.0, 43.0, 43.5, 53.0, 17.25, 30.0, 16.25),
-}
+from apps.products.sizing import MEN as MEN_TABLE, WOMEN as WOMEN_TABLE, detect_wearer  # noqa: E402
+
+MEN = MEN_TABLE  # kept for callers that import from here
 
 # Build adjusts circumferences (inches): slim / regular / full ("heavy or belly").
 BUILD = {
@@ -74,9 +57,9 @@ def _norm_sex(sex) -> str:
 
 
 def _guess_sex(category: str) -> str:
-    """Older callers don't send sex: corset/gown/boubou cuts are womenswear, the rest default to men."""
+    """Last resort when neither the shopper nor the piece says: gown/corset/boubou cuts are womenswear."""
     c = (category or '').lower()
-    return 'female' if any(k in c for k in ('corset', 'gown', 'boubou', 'dress')) else 'male'
+    return detect_wearer(title=c) or ('female' if any(k in c for k in ('corset', 'gown', 'boubou', 'dress')) else 'male')
 
 
 def parse_natural_language_profile(text: str) -> Dict[str, Any]:
@@ -139,7 +122,9 @@ def calculate_fit_estimate(
         build = 'regular'
 
     if sex == 'male':
-        chest, waist, hips, shoulder, neck, thigh, bicep = MEN[size]
+        t = MEN_TABLE[size]
+        chest, waist, hips, shoulder, neck, thigh, bicep = (t['chest_bust'], t['waist'], t['hips'], t['shoulder'],
+                                                            t['neck_collar'], t['thigh'], t['sleeve_circumference'])
         underbust = None
         # Men run ~1.5" more chest-to-underbust; not used for menswear cuts.
         sleeve = 0.357 * h            # shoulder point to wrist
@@ -152,7 +137,9 @@ def calculate_fit_estimate(
             top = 0.60 * h
         shoulder_to_underbust = None
     else:
-        chest, underbust, waist, hips, shoulder, thigh, bicep = WOMEN[size]
+        t = WOMEN_TABLE[size]
+        chest, underbust, waist, hips, shoulder, thigh, bicep = (t['chest_bust'], t['underbust'], t['waist'], t['hips'],
+                                                                 t['shoulder'], t['thigh'], t['sleeve_circumference'])
         neck = None
         sleeve = 0.35 * h
         trouser = 0.60 * h

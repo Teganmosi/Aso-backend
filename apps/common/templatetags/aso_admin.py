@@ -14,6 +14,16 @@ from apps.common.admin_display import naira
 register = template.Library()
 
 
+def _fit_stat(now, link):
+    from apps.products.models import FitFeedback
+    qs = FitFeedback.objects.filter(created_at__gte=now - timedelta(days=90)).exclude(fit_result='')
+    total = qs.count()
+    great = qs.filter(fit_result='GREAT').count()
+    return {'label': 'Fit well, last 90 days',
+            'value': f'{round(100 * great / total)}% of {total}' if total else 'No answers yet',
+            'url': link(FitFeedback, '')}
+
+
 @register.inclusion_tag('admin/aso_dashboard.html', takes_context=True)
 def aso_dashboard(context):
     from apps.orders.models import Order, OrderStatus
@@ -82,6 +92,7 @@ def aso_dashboard(context):
         {'label': 'Sales, last 7 days', 'value': naira(week.aggregate(s=Sum('total_amount_kobo'))['s'] or 0)},
         {'label': 'Live pieces', 'value': Product.objects.filter(approval_status=ApprovalStatus.APPROVED, is_active=True).count()},
         {'label': 'Designers', 'value': VendorProfile.objects.count()},
+        _fit_stat(now, link),
         {'label': 'Picked for the home page',
          'value': f"{Product.objects.filter(is_featured=True).count()} pieces · "
                   f"{VendorProfile.objects.filter(is_featured=True).count()} studios",

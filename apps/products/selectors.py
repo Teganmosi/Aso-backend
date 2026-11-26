@@ -38,7 +38,7 @@ def _public_product_qs():
         status=ProductStatus.PUBLISHED,
         is_active=True,
         vendor__status=VendorStatus.APPROVED,
-    ).select_related('vendor', 'category').prefetch_related('media', 'variants')
+    ).select_related('vendor', 'category', 'category__parent').prefetch_related('media', 'variants')
 
 
 # Home-page category pills. A pill matches its real category (and sub-categories) when one

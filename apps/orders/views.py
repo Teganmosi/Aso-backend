@@ -30,7 +30,7 @@ class OrderListCreateView(APIView):
             elif status_param != 'ALL':
                 queryset = queryset.filter(order_status=status_param)
 
-        orders = queryset.select_related('vendor').prefetch_related('items').order_by('-created_at')
+        orders = queryset.select_related('vendor').prefetch_related('items', 'items__fit_feedbacks').order_by('-created_at')
 
         serializer = OrderSerializer(orders, many=True)
         return Response({
@@ -458,3 +458,66 @@ class OrderDisputeView(APIView):
             'message': 'Thanks for telling us. Your payment is on hold and the Aso team will contact you within 1 working day.',
             'data': OrderSerializer(order).data,
         }, status=status.HTTP_200_OK)
+
+
+FIT_RESULTS = ('GREAT', 'TOO_SMALL', 'TOO_BIG', 'LENGTH', 'OTHER')
+FIT_AREAS = ('chest_bust', 'underbust', 'waist', 'hips', 'shoulder', 'neck_collar', 'sleeve_length',
+             'sleeve_circumference', 'top_length', 'trouser_length', 'inseam', 'thigh')
+
+
+def fit_source_for(item) -> str:
+    """How an order item was sized: measured / garment / estimate / standard_size."""
+    m = item.custom_measurements if isinstance(item.custom_measurements, dict) else {}
+    nums = [k for k in m if k in FIT_AREAS]
+    if not nums:
+        return 'standard_size'
+    if m.get('estimated_fields') or str(m.get('fit_source', '')).startswith('smart_estimator'):
+        return 'estimate'
+    if m.get('measured_on') == 'garment' or m.get('fit_source') == 'garment_flat':
+        return 'garment'
+    return 'measured'
+
+
+class OrderItemFitView(APIView):
+    """
+    POST /api/v1/orders/<order_id>/items/<item_id>/fit/  {"result": "GREAT", "areas": [...], "notes": ""}
+    "Did it fit?" from the shopper once the order has arrived. Answering again replaces the answer.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, order_id, item_id):
+        from apps.products.models import FitFeedback
+        order = Order.objects.filter(id=order_id, customer=request.user).first()
+        if not order:
+            return Response({'success': False, 'message': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if order.order_status not in (OrderStatus.DELIVERED, OrderStatus.COMPLETED, OrderStatus.DISPUTED):
+            return Response({'success': False, 'message': 'You can tell us about the fit once your order arrives.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        item = order.items.filter(id=item_id).first()
+        if not item:
+            return Response({'success': False, 'message': 'That piece is not in this order.'},
+                            status=status.HTTP_404_NOT_FOUND)
+        result = str(request.data.get('result', '')).upper()
+        if result not in FIT_RESULTS:
+            raise ValidationError({'result': 'Choose how it fits.'})
+        areas = request.data.get('areas') or []
+        if not isinstance(areas, list):
+            areas = []
+        areas = [a for a in areas if a in FIT_AREAS][:len(FIT_AREAS)]
+        notes = str(request.data.get('notes') or '')[:1000]
+
+        m = item.custom_measurements if isinstance(item.custom_measurements, dict) else {}
+        estimated = {k: m[k] for k in (m.get('estimated_fields') or []) if k in m}
+        fb = FitFeedback.objects.filter(order_item=item, customer=request.user).first() or \
+            FitFeedback(order_item=item, customer=request.user)
+        fb.fit_result = result
+        fb.problem_areas = areas
+        fb.notes = notes
+        fb.fit_source = fit_source_for(item)
+        fb.size_ordered = item.variant_size_snapshot or ''
+        fb.estimated_measurements = estimated
+        fb.final_measurements = {k: v for k, v in m.items() if k in FIT_AREAS}
+        fb.tailor_feedback = {'GREAT': 'PERFECT', 'TOO_SMALL': 'TOO_TIGHT', 'TOO_BIG': 'TOO_LOOSE'}.get(result, 'ALTERED')
+        fb.save()
+        return Response({'success': True, 'message': 'Thank you. This helps designers get the fit right.',
+                         'fit_result': result}, status=status.HTTP_200_OK)

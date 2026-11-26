@@ -536,16 +536,23 @@ class FitEstimateView(APIView):
 class FitFeedbackView(APIView):
     """
     PRD v2.0: POST /api/v1/fit/feedback/
-    Tailor/Customer feedback collection endpoint.
+    Tailor/Customer feedback collection endpoint. Shoppers use
+    /orders/<id>/items/<id>/fit/ now; this stays for staff tools and is login-only.
     """
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
         serializer = FitFeedbackSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         d = serializer.validated_data
 
-        user = request.user if request.user.is_authenticated else None
+        user = request.user
+        item_id = d.get('order_item_id')
+        if item_id and not request.user.is_staff:
+            from apps.orders.models import OrderItem
+            if not OrderItem.objects.filter(id=item_id, order__customer=user).exists():
+                return Response({'success': False, 'message': 'Order item not found.'},
+                                status=status.HTTP_404_NOT_FOUND)
         
         deltas = {}
         est = d.get('estimated_measurements', {})
@@ -583,3 +590,35 @@ class HomeFeedView(APIView):
     def get(self, request):
         from apps.products.home_feed import build_home_feed
         return Response(build_home_feed())
+
+
+class TypicalSizeChartView(APIView):
+    """
+    GET /api/v1/size-guide/typical/?category_id=..&title=..&sizes=S,M,L
+    Typical body measurements for the sizes a designer offers, as a starting point for their own
+    chart ("fill in typical numbers"). The designer edits them to match their pattern.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        from apps.products.models import Category
+        from apps.products.sizing import CUT_COLUMNS, cut_for_text, detect_wearer, typical_rows
+
+        title = str(request.query_params.get('title', ''))[:200]
+        sizes = [s.strip() for s in str(request.query_params.get('sizes', '')).split(',') if s.strip()][:20]
+        cat_name = cat_slug = parent_name = ''
+        cat_id = request.query_params.get('category_id')
+        if cat_id:
+            cat = Category.objects.filter(id=cat_id).select_related('parent').first() if len(str(cat_id)) == 36 else None
+            if cat:
+                cat_name, cat_slug = cat.name, cat.slug
+                parent_name = cat.parent.name if cat.parent else ''
+        wearer = detect_wearer(title, cat_name, cat_slug, parent_name)
+        cut = cut_for_text(title, cat_name)
+        return Response({
+            'success': True,
+            'wearer': wearer,
+            'cut': cut,
+            'columns': CUT_COLUMNS.get(cut, []),
+            'rows': typical_rows(sizes, wearer, cut),
+        })

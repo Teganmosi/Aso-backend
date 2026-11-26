@@ -292,3 +292,8 @@ a.aso-stat--link strong { font-size: 16px; }
 .aso-erase-h2 { font-size: 17px; font-weight: 800; margin: 0 0 8px; color: var(--body-loud-color); }
 .submit-row input.aso-danger { background: #B91C1C; }
 .submit-row input.aso-danger:hover { background: #991B1B; }
+.aso-fit-report { margin: 0 0 20px; padding: 14px 18px; border: 1px solid var(--hairline-color); border-radius: 10px; background: var(--aso-card-bg); }
+.aso-fit-report h2 { margin: 0 0 6px; font-size: 16px; font-weight: 800; color: var(--body-loud-color); background: none; padding: 0; }
+.aso-fit-report__big { font-size: 15px; margin: 0 0 10px; }
+.aso-fit-report table { width: 100%; }
+.aso-fit-report__hint { color: var(--body-quiet-color); font-size: 12px; margin: 10px 0 0; }

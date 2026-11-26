@@ -9,6 +9,7 @@ from apps.orders.views import (
     OrderActionRequestView,
     OrderActionResolveView,
     OrderDisputeView,
+    OrderItemFitView,
 )
 from apps.deliveries.views import OrderDeliveryDetailView, OrderWaybillView
 
@@ -19,6 +20,7 @@ urlpatterns = [
     path('<uuid:order_id>/preparing/', OrderPreparingView.as_view(), name='order-preparing'),
     path('<uuid:order_id>/ready/', OrderReadyView.as_view(), name='order-ready'),
     path('<uuid:order_id>/dispute/', OrderDisputeView.as_view(), name='order-dispute'),
+    path('<uuid:order_id>/items/<uuid:item_id>/fit/', OrderItemFitView.as_view(), name='order-item-fit'),
     path('<uuid:order_id>/delivery/', OrderDeliveryDetailView.as_view(), name='order-delivery-detail'),
     path('<uuid:order_id>/waybill/', OrderWaybillView.as_view(), name='order-waybill'),
     path('<uuid:order_id>/messages/', OrderMessageListCreateView.as_view(), name='order-messages-list-create'),

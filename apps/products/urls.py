@@ -15,6 +15,7 @@ from apps.products.views import (
     ProductMediaDetailView,
     ProductReviewListCreateView,
     HomeFeedView,
+    TypicalSizeChartView,
 )
 
 urlpatterns = [
@@ -22,6 +23,7 @@ urlpatterns = [
     path('fit/estimate/', FitEstimateView.as_view(), name='fit-estimate'),
     path('fit/feedback/', FitFeedbackView.as_view(), name='fit-feedback'),
     path('home/', HomeFeedView.as_view(), name='home-feed'),
+    path('size-guide/typical/', TypicalSizeChartView.as_view(), name='size-guide-typical'),
     # Category Endpoints
     path('categories/', CategoryListView.as_view(), name='category-list'),
     path('categories/<slug:slug>/', CategoryDetailView.as_view(), name='category-detail'),
