@@ -155,3 +155,63 @@ class CutTests(TestCase):
         self.assertEqual(cut_for_text('Indigo Adire Gown', 'Agbada & Grand Native Sets'), 'corset_gown')
         self.assertEqual(cut_for_text('Royal Set', 'Agbada & Grand Native Sets'), 'tops_senator')
         self.assertEqual(cut_for_text('Classic Piece', 'Misc'), 'full_set')
+
+
+class AccessoryTests(TestCase):
+    def setUp(self):
+        acc = Category.objects.create(name='Accessories', description='x')
+        self.caps = Category.objects.create(name='Caps (Fila) & Headwear', description='x', parent=acc)
+        self.beads = Category.objects.create(name='Coral Beads & Jewelry', description='x', parent=acc)
+        men = Category.objects.create(name='Men', description='x')
+        self.senator = Category.objects.create(name='Senator Suits', description='x', parent=men)
+        u = User.objects.create_user(email='d@aso.test', password='x')
+        self.vendor = VendorProfile.objects.create(user=u, store_name='S', city='I', state='L',
+                                                   status=VendorStatus.APPROVED)
+
+    def make(self, title, cat, sizes):
+        p = Product.objects.create(vendor=self.vendor, category=cat, title=title, description='x',
+                                   base_price_kobo=1000, status=ProductStatus.PUBLISHED)
+        for s in sizes:
+            ProductVariant.objects.create(product=p, size=s, stock_quantity=3)
+        d = APIClient().get(f'/api/v1/products/{p.slug}/').json()
+        return d.get('product', d)
+
+    def test_kinds(self):
+        from apps.products.sizing import fit_kind
+        self.assertEqual(fit_kind('Velvet Fila', 'Caps (Fila) & Headwear', 'caps', 'Accessories'), 'headwear')
+        self.assertEqual(fit_kind('Royal Set', 'Caps (Fila) & Headwear', 'caps', 'Accessories'), 'headwear')
+        self.assertEqual(fit_kind('Benin Coral Necklace', 'Coral Beads & Jewelry', 'coral', 'Accessories'), 'one_size')
+        self.assertEqual(fit_kind('Aso Oke Gele', 'Caps (Fila) & Headwear', 'caps', 'Accessories'), 'one_size')
+        self.assertEqual(fit_kind('Embroidered Fila', 'Senator Suits', 'senator', 'Men'), 'headwear')
+        self.assertEqual(fit_kind('Agbada with matching fila', 'Senator Suits', 'senator', 'Men'), 'clothing')
+        self.assertEqual(fit_kind('Bridal Headdress', 'Misc', 'misc', ''), 'one_size')
+        self.assertEqual(fit_kind('Classic Senator', 'Senator Suits', 'senator', 'Men'), 'clothing')
+
+    def test_cap_guide_is_by_head(self):
+        d = self.make('Velvet Fila', self.caps, ['S', 'M', 'L', 'Bespoke Fit'])
+        self.assertEqual(d['fit_kind'], 'headwear')
+        rows = d['size_chart']['body_measurements']
+        self.assertEqual([r['size'] for r in rows], ['S', 'M', 'L'])
+        self.assertEqual(set(rows[0]) - {'size'}, {'head', 'head_cm'})
+        self.assertEqual(rows[0]['head'].split('-')[1], rows[1]['head'].split('-')[0])
+
+    def test_beads_have_no_body_guide(self):
+        d = self.make('Benin Coral Necklace', self.beads, ['Free Size'])
+        self.assertEqual(d['fit_kind'], 'one_size')
+        self.assertEqual(d['size_chart']['body_measurements'], [])
+
+    def test_designer_head_chart_and_head_measurement(self):
+        chart = clean_designer_chart({'body_measurements': [{'size': 'M', 'head': '22-22.75'}]})
+        self.assertEqual(chart['body_measurements'][0]['head_cm'], '56-58')
+        with self.assertRaises(ValueError):
+            clean_designer_chart({'body_measurements': [{'size': 'M', 'head': '57'}]})  # cm typed as inches
+        from apps.common.measurements import clean_measurements
+        self.assertEqual(clean_measurements({'unit': 'IN', 'head': '22.5'})['head'], '22.5')
+
+    def test_typical_endpoint_for_caps(self):
+        res = APIClient().get('/api/v1/size-guide/typical/', {'category_id': str(self.caps.id),
+                                                             'title': 'Velvet Fila', 'sizes': 'M,L'}).json()
+        self.assertEqual((res['fit_kind'], res['columns']), ('headwear', ['head']))
+        res = APIClient().get('/api/v1/size-guide/typical/', {'category_id': str(self.beads.id),
+                                                             'title': 'Coral beads', 'sizes': 'M'}).json()
+        self.assertEqual(res['rows'], [])

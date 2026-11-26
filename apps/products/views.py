@@ -602,7 +602,7 @@ class TypicalSizeChartView(APIView):
 
     def get(self, request):
         from apps.products.models import Category
-        from apps.products.sizing import CUT_COLUMNS, cut_for_text, detect_wearer, typical_rows
+        from apps.products.sizing import CUT_COLUMNS, cut_for_text, detect_wearer, fit_kind, typical_rows
 
         title = str(request.query_params.get('title', ''))[:200]
         sizes = [s.strip() for s in str(request.query_params.get('sizes', '')).split(',') if s.strip()][:20]
@@ -614,10 +614,14 @@ class TypicalSizeChartView(APIView):
                 cat_name, cat_slug = cat.name, cat.slug
                 parent_name = cat.parent.name if cat.parent else ''
         wearer = detect_wearer(title, cat_name, cat_slug, parent_name)
-        cut = cut_for_text(title, cat_name)
+        kind = fit_kind(title, cat_name, cat_slug, parent_name)
+        if kind == 'one_size':
+            return Response({'success': True, 'wearer': wearer, 'fit_kind': kind, 'cut': None, 'columns': [], 'rows': []})
+        cut = 'headwear' if kind == 'headwear' else cut_for_text(title, cat_name)
         return Response({
             'success': True,
             'wearer': wearer,
+            'fit_kind': kind,
             'cut': cut,
             'columns': CUT_COLUMNS.get(cut, []),
             'rows': typical_rows(sizes, wearer, cut),

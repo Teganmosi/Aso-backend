@@ -24,6 +24,7 @@ FIELDS = {
     'thigh': ('Thigh', 12, 45),
     'ankle_opening': ('Ankle opening', 6, 30),
     'shoulder_to_underbust': ('Shoulder to underbust', 6, 25),
+    'head': ('Head', 17, 28),
 }
 TEXT_KEYS = {'notes': 1000, 'category_type': 40, 'fit_source': 40, 'height_snapshot': 20, 'size_snapshot': 10,
              'sex': 10, 'measured_on': 20}

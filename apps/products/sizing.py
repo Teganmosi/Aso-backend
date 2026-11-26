@@ -73,6 +73,47 @@ def wearer_for_product(product) -> str | None:
                          getattr(parent, 'name', '') or '')
 
 
+# ---- Accessories ---------------------------------------------------------------------------
+# Caps are sized by head; beads, geles and other accessories are one size.
+_HEADWEAR = re.compile(r"\b(caps?|fila|filas|filan|hats?|beret|crowns?|turbans?|kufi|skull ?cap|abeti[- ]?aja)\b")
+_ONE_SIZE = re.compile(r"\b(beads?|coral|necklaces?|bracelets?|bangles?|earrings?|jewel(?:le)?ry|rings?|anklets?|"
+                       r"gele|geles|head ?ties?|head ?wraps?|headbands?|sash|sashes|bags?|purses?|clutch|clutches|"
+                       r"headpieces?|hand ?fans?|fans?|brooch|cufflinks?|ipele|shawl|stole|scarf|scarves|irukere|walking stick)\b")
+
+# Head circumference per size (inches and cm); ranges meet so every head has a size.
+HEAD = {
+    'XS': ('20.5-21.25', '52-54'), 'S': ('21.25-22', '54-56'), 'M': ('22-22.75', '56-58'),
+    'L': ('22.75-23.5', '58-60'), 'XL': ('23.5-24.5', '60-62'), 'XXL': ('24.5-25.25', '62-64'),
+    '3XL': ('25.25-26', '64-66'),
+}
+
+
+def fit_kind(title: str = '', category_name: str = '', category_slug: str = '', parent_name: str = '') -> str:
+    """'clothing', 'headwear' (sized by head) or 'one_size' (beads, geles, bags...)."""
+    # "Headdress" isn't a dress.
+    t = re.sub(r'head ?(dress|piece)', 'headpiece', (title or '').lower())
+    if _cut(t):  # "Agbada with matching fila" is clothing
+        return 'clothing'
+    if _HEADWEAR.search(t):
+        return 'headwear'
+    if _ONE_SIZE.search(t):
+        return 'one_size'
+    depts = {(d or '').strip().lower() for d in (parent_name, category_name, category_slug)}
+    if depts & {'accessories', 'accessory'}:
+        c = f'{category_name} {category_slug}'.lower().replace('-', ' ')
+        if _HEADWEAR.search(c) or 'headwear' in c:
+            return 'headwear'
+        return 'one_size'
+    return 'clothing'
+
+
+def fit_kind_for_product(product) -> str:
+    cat = getattr(product, 'category', None)
+    parent = getattr(cat, 'parent', None) if cat else None
+    return fit_kind(product.title or '', getattr(cat, 'name', '') or '', getattr(cat, 'slug', '') or '',
+                    getattr(parent, 'name', '') or '')
+
+
 def cut_for_text(text: str, category: str = '') -> str:
     """
     corset_gown | boubou | trousers | tops_senator | full_set (same names the website uses).
@@ -104,8 +145,9 @@ CUT_COLUMNS = {
     'trousers': ['waist', 'hips'],
     'tops_senator': ['chest_bust', 'waist', 'neck_collar'],
     'full_set': ['chest_bust', 'waist', 'hips'],
+    'headwear': ['head'],
 }
-COLUMN_LABELS = {'chest_bust': 'Bust / chest', 'underbust': 'Underbust', 'waist': 'Waist', 'hips': 'Hips',
+COLUMN_LABELS = {'head': 'Head', 'chest_bust': 'Bust / chest', 'underbust': 'Underbust', 'waist': 'Waist', 'hips': 'Hips',
                  'neck_collar': 'Neck'}
 
 
@@ -132,6 +174,10 @@ def _fmt(v: float) -> str:
 
 def typical_rows(sizes, wearer: str | None, cut: str) -> list[dict]:
     """Size-guide rows (ranges as text, inches and cm) for the sizes a piece is sold in."""
+    if cut == 'headwear':
+        mapped = [(size, letter_for(size, None)) for size in sizes]
+        mapped = sorted((m for m in mapped if m[1]), key=lambda m: LETTERS.index(m[1]))
+        return [{'size': str(size), 'head': HEAD[letter][0], 'head_cm': HEAD[letter][1]} for size, letter in mapped]
     table = MEN if wearer == 'male' else WOMEN
     cols = [c for c in CUT_COLUMNS.get(cut, CUT_COLUMNS['full_set']) if c in table['M']]
     rows = []
@@ -158,16 +204,18 @@ def typical_rows(sizes, wearer: str | None, cut: str) -> list[dict]:
 
 def generic_size_chart(product, sizes=None) -> dict:
     wearer = wearer_for_product(product)
-    cut = cut_for_text(product.title, getattr(product.category, 'name', ''))
+    kind = fit_kind_for_product(product)
+    cut = 'headwear' if kind == 'headwear' else cut_for_text(product.title, getattr(product.category, 'name', ''))
     if sizes is None:
         sizes = [v.size for v in product.variants.all() if v.is_active]
-    rows = typical_rows(sizes, wearer, cut)
+    rows = [] if kind == 'one_size' else typical_rows(sizes, wearer, cut)
     stretch = (product.size_chart or {}).get('stretch') if isinstance(product.size_chart, dict) else None
     return {
         'is_generic': True,
         'wearer': wearer,
-        'cut': cut,
-        'columns': [COLUMN_LABELS[c] for c in CUT_COLUMNS.get(cut, [])],
+        'fit_kind': kind,
+        'cut': None if kind == 'one_size' else cut,
+        'columns': [] if kind == 'one_size' else [COLUMN_LABELS[c] for c in CUT_COLUMNS.get(cut, [])],
         'stretch': stretch or None,
         'unit_default': 'IN',
         'body_measurements': rows,
@@ -179,7 +227,7 @@ def generic_size_chart(product, sizes=None) -> dict:
 
 # Chart column -> limits key in apps.common.measurements.FIELDS
 _CHART_COLUMNS = {'bust': 'chest_bust', 'underbust': 'underbust', 'waist': 'waist', 'hip': 'hips',
-                  'neck_collar': 'neck_collar'}
+                  'neck_collar': 'neck_collar', 'head': 'head'}
 _CHART_SETTINGS = {'stretch': ('NON', 'SLIGHT', 'MEDIUM', 'HIGH'), 'unit_default': ('IN', 'CM')}
 _CHART_FREE_TEXT = {'garment_type': 30, 'sizing_system': 20}
 

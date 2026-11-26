@@ -242,6 +242,7 @@ class ProductListSerializer(serializers.ModelSerializer):
     primary_image_url = serializers.SerializerMethodField()
     available_sizes = serializers.SerializerMethodField()
     wearer = serializers.SerializerMethodField()
+    fit_kind = serializers.SerializerMethodField()
     size_chart = serializers.SerializerMethodField()
 
     class Meta:
@@ -262,6 +263,7 @@ class ProductListSerializer(serializers.ModelSerializer):
             'primary_image_url',
             'available_sizes',
             'wearer',
+            'fit_kind',
             'size_chart',
             'vendor',
             'category',
@@ -272,6 +274,10 @@ class ProductListSerializer(serializers.ModelSerializer):
         """'female', 'male' or None: who the piece is for, from its department and title."""
         from apps.products.sizing import wearer_for_product
         return wearer_for_product(obj)
+
+    def get_fit_kind(self, obj):
+        from apps.products.sizing import fit_kind_for_product
+        return fit_kind_for_product(obj)
 
     def get_size_chart(self, obj):
         if obj.size_chart and isinstance(obj.size_chart, dict) and obj.size_chart.get('body_measurements'):
@@ -311,6 +317,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     media = serializers.SerializerMethodField()
     variants = serializers.SerializerMethodField()
     wearer = serializers.SerializerMethodField()
+    fit_kind = serializers.SerializerMethodField()
     size_chart = serializers.SerializerMethodField()
 
     class Meta:
@@ -333,6 +340,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             'media',
             'variants',
             'wearer',
+            'fit_kind',
             'size_chart',
             'vendor',
             'category',
@@ -344,6 +352,10 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         """'female', 'male' or None: who the piece is for, from its department and title."""
         from apps.products.sizing import wearer_for_product
         return wearer_for_product(obj)
+
+    def get_fit_kind(self, obj):
+        from apps.products.sizing import fit_kind_for_product
+        return fit_kind_for_product(obj)
 
     def get_size_chart(self, obj):
         if obj.size_chart and isinstance(obj.size_chart, dict) and obj.size_chart.get('body_measurements'):
