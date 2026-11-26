@@ -1,9 +1,70 @@
+import html
 import logging
 from django.conf import settings
 from django.core.mail import send_mail
-from django.utils.html import strip_tags
+from django.utils.html import escape, strip_tags
 
 logger = logging.getLogger(__name__)
+
+# Brand colours (same as the logo and the site).
+_INK = '#111827'
+_GOLD = '#C59B27'
+_GREEN = '#064E3B'
+_FONT = "'Plus Jakarta Sans', 'Segoe UI', Helvetica, Arial, sans-serif"
+
+
+def _site_url() -> str:
+    return getattr(settings, 'FRONTEND_URL', 'https://asomarketplace.com.ng').rstrip('/')
+
+
+def _logo_url() -> str:
+    # Must be a public PNG: mail apps can't load localhost and Gmail doesn't show SVG.
+    return getattr(settings, 'EMAIL_LOGO_URL', 'https://asomarketplace.com.ng/icon-192.png')
+
+
+def _button(label: str, url: str) -> str:
+    return (f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 28px 0 8px;"><tr>'
+            f'<td bgcolor="{_GREEN}" style="border-radius: 8px;">'
+            f'<a href="{url}" style="display: inline-block; padding: 14px 26px; font-family: {_FONT}; font-size: 15px; '
+            f'font-weight: bold; color: #ffffff; text-decoration: none; border-radius: 8px;">{label}</a>'
+            f'</td></tr></table>')
+
+
+def _branded_email(heading: str, body_html: str, *, preheader: str = '', badge: str = '',
+                   heading_color: str = _INK) -> str:
+    """Wraps an email body in the Aso layout: logo header, white card, footer.
+    Tables and inline styles only, so it also renders in Outlook and Gmail."""
+    site = _site_url()
+    badge_html = (f'<p style="margin: 0 0 16px;"><span style="display: inline-block; background: #FBF5E3; '
+                  f'color: #8A6A12; border: 1px solid {_GOLD}; border-radius: 999px; padding: 6px 14px; '
+                  f'font-size: 12px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">'
+                  f'{badge}</span></p>') if badge else ''
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin: 0; padding: 0; background: #F5F3EE;">
+<div style="display: none; max-height: 0; overflow: hidden; opacity: 0; color: #F5F3EE;">{preheader}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F5F3EE">
+<tr><td align="center" style="padding: 24px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px;">
+<tr><td align="center" bgcolor="{_INK}" style="background: {_INK}; padding: 20px; border-radius: 12px 12px 0 0;">
+<a href="{site}" style="text-decoration: none;"><img src="{_logo_url()}" width="104" height="104" alt="Aso Marketplace" style="display: block; border: 0; color: #ffffff; font-family: {_FONT}; font-size: 20px; font-weight: bold; letter-spacing: 4px;"></a>
+</td></tr>
+<tr><td height="4" bgcolor="{_GOLD}" style="background: {_GOLD}; font-size: 0; line-height: 0;">&nbsp;</td></tr>
+<tr><td bgcolor="#ffffff" style="background: #ffffff; padding: 36px 32px 32px; border-radius: 0 0 12px 12px; font-family: {_FONT}; font-size: 16px; line-height: 1.6; color: #374151;">
+{badge_html}<h1 style="margin: 0 0 20px; font-family: {_FONT}; font-size: 24px; line-height: 1.3; color: {heading_color};">{heading}</h1>
+{body_html}
+</td></tr>
+<tr><td align="center" style="padding: 24px 16px; font-family: {_FONT}; font-size: 12px; line-height: 1.6; color: #6B7280;">
+<strong style="color: {_INK}; letter-spacing: 2px;">ASO MARKETPLACE</strong><br>
+Connecting Nigerian tailors with fashion lovers<br>
+<a href="{site}" style="color: #8A6A12;">asomarketplace.com.ng</a> &nbsp;&middot;&nbsp; <a href="mailto:support@asomarketplace.com.ng" style="color: #8A6A12;">support@asomarketplace.com.ng</a>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>"""
 
 
 def send_transactional_email(subject: str, html_message: str, recipient_list: list[str]) -> bool:
@@ -14,7 +75,10 @@ def send_transactional_email(subject: str, html_message: str, recipient_list: li
         return False
 
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'Aso Marketplace <hello@asomarketplace.com.ng>')
-    plain_message = strip_tags(html_message)
+    # Plain-text copy: drop the layout's indentation and blank lines.
+    plain_text = html.unescape(strip_tags(html_message)).replace(chr(160), ' ')
+    plain_lines = (line.strip() for line in plain_text.splitlines())
+    plain_message = (chr(10) * 2).join(line for line in plain_lines if line and line != chr(183))
 
     try:
         sent = send_mail(
@@ -38,17 +102,12 @@ def send_order_placed_notification(order) -> bool:
     """
     customer_email = order.customer.email
     subject = f"Order #{order.order_number} Placed — Aso Marketplace"
-    html_content = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #111827;">Thank you for your order!</h2>
+    html_content = _branded_email(f"Thank you for your order!", f"""
         <p>Dear {order.customer.first_name},</p>
         <p>Your order <strong>#{order.order_number}</strong> with <strong>{order.vendor.store_name}</strong> has been received.</p>
         <p><strong>Total Amount:</strong> ₦{order.total_amount_naira:,.2f}</p>
         <p>We are waiting for payment confirmation to proceed with tailoring and fulfillment.</p>
-        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
-        <p style="color: #6B7280; font-size: 12px;">Aso Marketplace — Connecting Nigerian Tailors with Fashion Lovers</p>
-    </div>
-    """
+    """)
     return send_transactional_email(subject, html_content, [customer_email])
 
 
@@ -61,31 +120,21 @@ def send_payment_received_notification(order) -> bool:
     
     # Customer Email
     subject_customer = f"Payment Confirmed: Order #{order.order_number} — Aso Marketplace"
-    html_customer = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #059669;">Payment Confirmed!</h2>
+    html_customer = _branded_email(f"Payment Confirmed!", f"""
         <p>Dear {order.customer.first_name},</p>
         <p>We have received your payment of <strong>₦{order.total_amount_naira:,.2f}</strong> for Order <strong>#{order.order_number}</strong>.</p>
         <p>The designer <strong>{order.vendor.store_name}</strong> has been notified and has 48 hours to accept and start preparing your garment.</p>
-        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
-        <p style="color: #6B7280; font-size: 12px;">Aso Marketplace</p>
-    </div>
-    """
+    """, heading_color="#059669")
     send_transactional_email(subject_customer, html_customer, [customer_email])
 
     # Vendor Email
     subject_vendor = f"New Paid Order #{order.order_number} Received! — Action Required"
-    html_vendor = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #111827;">New Paid Order Received!</h2>
+    html_vendor = _branded_email(f"New Paid Order Received!", f"""
         <p>Hello {order.vendor.store_name},</p>
         <p>You have received a new paid order <strong>#{order.order_number}</strong>.</p>
         <p><strong>Subtotal:</strong> ₦{order.subtotal_naira:,.2f}</p>
         <p>Please log in to your vendor dashboard and accept the order within 48 hours to meet the fulfillment SLA.</p>
-        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
-        <p style="color: #6B7280; font-size: 12px;">Aso Marketplace</p>
-    </div>
-    """
+    """)
     send_transactional_email(subject_vendor, html_vendor, [vendor_email])
     return True
 
@@ -97,18 +146,13 @@ def send_order_dispatched_notification(delivery) -> bool:
     order = delivery.order
     customer_email = order.customer.email
     subject = f"Your Order #{order.order_number} is Out for Delivery! 🚚"
-    html_content = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #2563EB;">Your Package is on the Way!</h2>
+    html_content = _branded_email(f"Your Package is on the Way!", f"""
         <p>Dear {order.customer.first_name},</p>
         <p>Your order <strong>#{order.order_number}</strong> from <strong>{order.vendor.store_name}</strong> has been dispatched.</p>
         <p><strong>Tracking Number:</strong> {delivery.tracking_number}</p>
         <p><strong>Carrier:</strong> {delivery.carrier_name}</p>
         <p>Our dispatch partner is delivering your order to your selected address.</p>
-        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
-        <p style="color: #6B7280; font-size: 12px;">Aso Marketplace</p>
-    </div>
-    """
+    """, heading_color="#2563EB")
     return send_transactional_email(subject, html_content, [customer_email])
 
 
@@ -118,16 +162,11 @@ def send_order_completed_notification(order) -> bool:
     """
     customer_email = order.customer.email
     subject = f"Order #{order.order_number} Completed — Leave a Review ⭐"
-    html_content = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #059669;">Order Completed!</h2>
+    html_content = _branded_email(f"Order Completed!", f"""
         <p>Dear {order.customer.first_name},</p>
         <p>Your order <strong>#{order.order_number}</strong> has been marked as complete.</p>
         <p>How did <strong>{order.vendor.store_name}</strong> do? Share your feedback and leave a verified buyer review on your dashboard!</p>
-        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
-        <p style="color: #6B7280; font-size: 12px;">Aso Marketplace</p>
-    </div>
-    """
+    """, heading_color="#059669")
     return send_transactional_email(subject, html_content, [customer_email])
 
 
@@ -138,16 +177,11 @@ def send_payout_initiated_notification(payout_request) -> bool:
     vendor = payout_request.vendor
     vendor_email = vendor.user.email
     subject = f"Payout #{payout_request.reference} Initiated — ₦{payout_request.amount_naira:,.2f}"
-    html_content = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #111827;">Payout Processing</h2>
+    html_content = _branded_email(f"Payout Processing", f"""
         <p>Hello {vendor.store_name},</p>
         <p>Your withdrawal request of <strong>₦{payout_request.amount_naira:,.2f}</strong> (Reference: {payout_request.reference}) is now processing.</p>
         <p>Funds will be credited to your registered bank account shortly.</p>
-        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
-        <p style="color: #6B7280; font-size: 12px;">Aso Marketplace</p>
-    </div>
-    """
+    """)
     return send_transactional_email(subject, html_content, [vendor_email])
 
 
@@ -171,23 +205,47 @@ def send_verification_submitted_notification(vendor) -> bool:
 def send_verification_decision_notification(vendor) -> bool:
     """Tells the designer whether Aso approved or rejected their verification."""
     approved = vendor.is_verified
-    subject = "You're now a Verified Designer on Aso" if approved else "Action needed: your Aso verification"
+    store = escape(vendor.store_name)
+    studio = f"{_site_url()}/vendor/profile"
     if approved:
-        body = ("<p>Your identity has been verified. Your storefront now shows the <strong>Verified</strong> badge "
-                "and withdrawals to your bank account are unlocked.</p>")
+        subject = "You're now a Verified Designer on Aso"
+        tick = (f'<td width="28" valign="top" style="padding: 6px 0; font-size: 16px; font-weight: bold; '
+                f'color: {_GOLD};">&#10003;</td>')
+        perks = ''.join(
+            f'<tr>{tick}<td style="padding: 6px 0; font-size: 15px; line-height: 1.5; color: #374151;">{line}</td></tr>'
+            for line in (
+                'The <strong>Verified</strong> badge now shows on your storefront and your pieces.',
+                'Withdrawals to your bank account are unlocked.',
+                'Shoppers can see that Aso has confirmed who you are.',
+            ))
+        html_content = _branded_email(
+            f"Congratulations, {store}!",
+            f"""
+        <p style="margin: 0 0 16px;">We've checked your details and confirmed your identity. You are now a
+        <strong>Verified Designer</strong> on Aso.</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #FBF5E3; border-radius: 10px; margin: 20px 0 4px;">
+        <tr><td style="padding: 14px 20px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0">{perks}</table>
+        </td></tr></table>
+        {_button('Open your Designer Studio', f'{_site_url()}/vendor/dashboard')}
+        <p style="margin: 20px 0 0; font-size: 14px; color: #6B7280;">Thank you for building your studio with us.</p>
+    """,
+            preheader='Your Verified badge is live and withdrawals are unlocked.',
+            badge='&#10003; Verified Designer')
     else:
-        reason = vendor.verification_rejection_reason or 'We could not confirm the details you submitted.'
-        body = (f"<p>We couldn't verify your details: {reason}</p>"
-                "<p>Please update your NIN or CAC in your Designer Studio profile and save to resubmit. "
-                "You can keep selling in the meantime.</p>")
-    html_content = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <p>Hello {vendor.store_name},</p>
-        {body}
-        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
-        <p style="color: #6B7280; font-size: 12px;">Aso Marketplace</p>
-    </div>
-    """
+        subject = "Action needed: your Aso verification"
+        reason = escape(vendor.verification_rejection_reason or 'We could not confirm the details you submitted.')
+        html_content = _branded_email(
+            "We couldn't verify your details yet",
+            f"""
+        <p style="margin: 0 0 16px;">Hello {store},</p>
+        <p style="margin: 0 0 8px;">We reviewed the NIN/CAC details you sent, but couldn't confirm them. Here's why:</p>
+        <p style="margin: 0 0 16px; background: #FEF3C7; border-left: 4px solid #D97706; padding: 12px 16px; border-radius: 6px; color: #78350F;">{reason}</p>
+        <p style="margin: 0;">Please update your NIN or CAC in your Designer Studio profile and save to resubmit.
+        You can keep selling in the meantime.</p>
+        {_button('Update your details', studio)}
+    """,
+            preheader='One thing to fix before we can give you the Verified badge.')
     return send_transactional_email(subject, html_content, [vendor.user.email])
 
 
@@ -202,36 +260,24 @@ def send_password_reset_email(user) -> bool:
     base = getattr(settings, 'FRONTEND_URL', 'https://asomarketplace.com.ng').rstrip('/')
     link = f"{base}/reset-password?uid={uid}&token={token}"
     name = user.first_name or 'there'
-    html_content = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #111827;">Reset your Aso password</h2>
+    html_content = _branded_email("Reset your Aso password", f"""
         <p>Hi {name},</p>
         <p>We received a request to reset the password for your Aso account. Choose a new one here:</p>
-        <p style="margin: 24px 0;">
-            <a href="{link}" style="background: #064E3B; color: #ffffff; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold;">Choose a new password</a>
-        </p>
+        {_button('Choose a new password', link)}
         <p>This link works for 2 hours and can be used once. If you didn't ask for this, you can ignore this email; your password won't change.</p>
-        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
-        <p style="color: #6B7280; font-size: 12px;">Aso Marketplace</p>
-    </div>
-    """
+    """)
     return send_transactional_email("Reset your Aso password", html_content, [user.email])
 
 
 def send_email_verification_code(user, code: str, minutes: int = 15) -> bool:
     """The 6-digit sign-up code. The code is in the subject too, so it shows in phone notifications."""
     name = user.first_name or 'there'
-    html_content = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #111827;">Confirm your email</h2>
+    html_content = _branded_email("Confirm your email", f"""
         <p>Hi {name},</p>
         <p>Welcome to Aso. Enter this code to confirm your email address:</p>
         <p style="margin: 24px 0; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #064E3B;">{code}</p>
         <p>It works for {minutes} minutes. If you didn't create an Aso account, you can ignore this email.</p>
-        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
-        <p style="color: #6B7280; font-size: 12px;">Aso Marketplace</p>
-    </div>
-    """
+    """)
     return send_transactional_email(f"{code} is your Aso code", html_content, [user.email])
 
 
@@ -249,14 +295,11 @@ def send_product_review_notification(product, approved: bool) -> bool:
                 f"<p style=\"background:#FEF3C7;padding:12px;border-radius:6px;\">{product.rejection_reason}</p>"
                 f"<p>Fix it in your <a href=\"{base}/vendor/products\">Designer Studio</a> and save. "
                 f"It goes live again straight away.</p>")
-    html_content = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    heading = "Your piece is live again" if approved else "We've paused one of your pieces"
+    html_content = _branded_email(heading, f"""
         <p>Hello {vendor.store_name},</p>
         {body}
-        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
-        <p style="color: #6B7280; font-size: 12px;">Aso Marketplace</p>
-    </div>
-    """
+    """)
     return send_transactional_email(subject, html_content, [vendor.user.email])
 
 
