@@ -505,14 +505,15 @@ class FitEstimateView(APIView):
             style=data.get('style', 'standard'),
             known_measurements=data.get('known_measurements', {}),
             text_description=data.get('text_description', ''),
-            customer=user
+            customer=user,
+            sex=data.get('sex', ''),
         )
 
         try:
             FitEstimate.objects.create(
                 customer=user,
                 garment_category=data.get('category', 'tops_senator'),
-                estimator_version='2.0',
+                estimator_version=result['version'],
                 input_profile=result['input_profile'],
                 body_measurements=result['body_measurements'],
                 garment_measurements=result['garment_measurements'],

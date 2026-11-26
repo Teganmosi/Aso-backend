@@ -258,6 +258,21 @@ class OrderMessageListCreateView(APIView):
         }, status=status.HTTP_201_CREATED)
 
 
+def _measured_item(order, item_id=None, key=None):
+    """The order item a measurement request is about: the one named, else the first with measurements."""
+    items = list(order.items.all())
+    if item_id:
+        for it in items:
+            if str(it.id) == str(item_id):
+                return it
+    with_meas = [it for it in items if isinstance(it.custom_measurements, dict) and it.custom_measurements]
+    if key:
+        for it in with_meas:
+            if key in it.custom_measurements:
+                return it
+    return (with_meas or items or [None])[0]
+
+
 class OrderActionRequestView(APIView):
     """
     Designer 1-tap structured action request (e.g. Request Waist Re-check).
@@ -289,7 +304,7 @@ class OrderActionRequestView(APIView):
         label = serializer.validated_data['label']
         prompt = serializer.validated_data.get('prompt') or f"Designer requested verification of {label}."
 
-        first_item = order.items.first()
+        first_item = _measured_item(order, serializer.validated_data.get('order_item_id'), measurement_key)
         cur_val = ''
         unit = 'IN'
         if first_item and isinstance(first_item.custom_measurements, dict):
@@ -308,6 +323,7 @@ class OrderActionRequestView(APIView):
                 'label': label,
                 'current_value': cur_val,
                 'unit': unit,
+                'order_item_id': str(first_item.id) if first_item else None,
                 'status': 'PENDING'
             }
         )
@@ -355,6 +371,15 @@ class OrderActionResolveView(APIView):
         except OrderMessage.DoesNotExist:
             return Response({'success': False, 'message': 'Action message not found.'}, status=status.HTTP_404_NOT_FOUND)
 
+        # The item the designer asked about (multi-piece orders), then check the new number.
+        payload = action_msg.action_payload if isinstance(action_msg.action_payload, dict) else {}
+        item_id = serializer.validated_data.get('order_item_id') or payload.get('order_item_id')
+        first_item = _measured_item(order, item_id, measurement_key)
+        from apps.common.measurements import FIELDS, check_value
+        if measurement_key in FIELDS:
+            unit = str((first_item.custom_measurements or {}).get('unit') or 'IN').upper() if first_item else 'IN'
+            new_val = f'{check_value(measurement_key, new_val, "CM" if unit == "CM" else "IN"):g}'
+
         # Update action message payload
         if isinstance(action_msg.action_payload, dict):
             action_msg.action_payload['status'] = 'RESOLVED'
@@ -362,10 +387,11 @@ class OrderActionResolveView(APIView):
             action_msg.save(update_fields=['action_payload'])
 
         # Update order item custom cut sheet
-        first_item = order.items.first()
         if first_item:
             meas = dict(first_item.custom_measurements or {})
             meas[measurement_key] = new_val
+            if isinstance(meas.get('estimated_fields'), list):  # the shopper has now confirmed this one
+                meas['estimated_fields'] = [k for k in meas['estimated_fields'] if k != measurement_key]
             first_item.custom_measurements = meas
             first_item.save(update_fields=['custom_measurements'])
 

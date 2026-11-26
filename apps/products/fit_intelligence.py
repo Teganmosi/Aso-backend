@@ -1,104 +1,109 @@
 """
-My Aso Fit — Intelligent Fit Estimator Engine (PRD v2.0)
-Implements Hybrid Architecture:
-1. Natural Language Interpretation (Regex / LLM fallback)
-2. 3-Factor Anthropometric Matrix (3FAM)
-3. Garment-Specific Length & Ease Rules
-4. Multi-Tier Confidence Scoring
-5. Priority Cascade: Explicit User > Verified Historical > Tailor Confirmed > Deterministic
+My Aso Fit: rough measurement estimate from a shopper's usual size, height, build and sex.
+
+Be honest about what this is. Three or four answers cannot pin down a body: two people who
+both wear "L" at the same height can differ by 4-5 inches at the waist, and size letters
+differ between brands. So this produces a starting point with realistic ranges, and the
+shopper is told to check with a tape measure. Orders placed with estimated numbers are
+flagged to the designer, who confirms them with the shopper before cutting.
+
+Tables are body measurements in inches, typical for ready-to-wear sizing sold in Nigeria
+(men: chest-based sizing; women: roughly UK 6 = XS up to UK 22 = 3XL).
+Lengths scale with height using standard body proportions.
 """
 import re
-import math
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
-# Baseline Anchor Matrix (Inches)
-BASELINES = {
-    'XS': {'bust': 34.0, 'shoulder': 16.5, 'waist': 28.0, 'hips': 35.0, 'sleeve': 24.0, 'top_len': 34.0, 'trouser_len': 39.0, 'thigh': 21.0, 'collar': 14.5},
-    'S':  {'bust': 37.0, 'shoulder': 17.5, 'waist': 30.0, 'hips': 38.0, 'sleeve': 24.5, 'top_len': 35.0, 'trouser_len': 40.0, 'thigh': 22.5, 'collar': 15.0},
-    'M':  {'bust': 40.0, 'shoulder': 18.5, 'waist': 33.0, 'hips': 41.0, 'sleeve': 25.0, 'top_len': 36.0, 'trouser_len': 41.0, 'thigh': 24.0, 'collar': 15.5},
-    'L':  {'bust': 43.0, 'shoulder': 19.5, 'waist': 36.0, 'hips': 44.0, 'sleeve': 25.5, 'top_len': 37.0, 'trouser_len': 42.0, 'thigh': 25.5, 'collar': 16.5},
-    'XL': {'bust': 46.0, 'shoulder': 20.5, 'waist': 39.0, 'hips': 47.0, 'sleeve': 26.0, 'top_len': 38.0, 'trouser_len': 43.0, 'thigh': 27.0, 'collar': 17.5},
-    'XXL':{'bust': 49.0, 'shoulder': 21.5, 'waist': 43.0, 'hips': 51.0, 'sleeve': 26.5, 'top_len': 39.0, 'trouser_len': 44.0, 'thigh': 28.5, 'collar': 18.5},
-    '3XL':{'bust': 52.0, 'shoulder': 22.5, 'waist': 47.0, 'hips': 55.0, 'sleeve': 27.0, 'top_len': 40.0, 'trouser_len': 45.0, 'thigh': 30.0, 'collar': 19.5},
+VERSION = '2.0'
+
+MEN = {
+    #        chest  waist  hips  shoulder neck  thigh  bicep
+    'XS':  (34.0, 28.0, 34.0, 16.5, 14.0, 20.0, 11.5),
+    'S':   (37.0, 30.5, 37.0, 17.0, 14.75, 21.5, 12.25),
+    'M':   (40.0, 33.0, 40.0, 18.0, 15.5, 23.0, 13.0),
+    'L':   (43.0, 36.0, 43.0, 19.0, 16.25, 24.5, 14.0),
+    'XL':  (46.0, 39.5, 46.0, 20.0, 17.0, 26.0, 15.0),
+    'XXL': (49.0, 43.0, 49.0, 21.0, 18.0, 27.5, 16.0),
+    '3XL': (52.0, 46.5, 52.0, 22.0, 19.0, 29.0, 17.0),
+}
+WOMEN = {
+    #        bust  underbust waist  hips  shoulder thigh bicep
+    'XS':  (32.0, 27.0, 25.0, 35.0, 14.25, 20.5, 10.0),
+    'S':   (34.5, 29.0, 27.5, 37.5, 14.75, 22.0, 10.75),
+    'M':   (37.0, 31.5, 30.0, 40.5, 15.25, 23.5, 11.5),
+    'L':   (40.0, 34.0, 33.0, 43.5, 15.75, 25.0, 12.5),
+    'XL':  (43.0, 37.0, 36.5, 47.0, 16.25, 27.0, 13.75),
+    'XXL': (46.0, 40.0, 40.0, 50.0, 16.75, 28.5, 15.0),
+    '3XL': (49.0, 43.0, 43.5, 53.0, 17.25, 30.0, 16.25),
 }
 
-# Morphological Build Offsets (Inches)
-BUILD_OFFSETS = {
-    'slim':     {'bust': -1.5, 'shoulder': -0.3, 'waist': -1.8, 'hips': -1.5, 'thigh': -1.2, 'collar': -0.4},
-    'regular':  {'bust': 0.0,  'shoulder': 0.0,  'waist': 0.0,  'hips': 0.0,  'thigh': 0.0,  'collar': 0.0},
-    'athletic': {'bust': 1.0,  'shoulder': 0.4,  'waist': -1.2, 'hips': 0.5,  'thigh': 0.8,  'collar': 0.3},
-    'broad':    {'bust': 1.2,  'shoulder': 0.6,  'waist': -0.8, 'hips': 0.5,  'thigh': 0.8,  'collar': 0.4},
-    'full':     {'bust': 2.5,  'shoulder': 0.2,  'waist': 3.0,  'hips': 3.5,  'thigh': 2.0,  'collar': 0.6},
-    'curvy':    {'bust': 2.5,  'shoulder': 0.1,  'waist': 1.0,  'hips': 4.0,  'thigh': 2.2,  'collar': 0.2},
+# Build adjusts circumferences (inches): slim / regular / full ("heavy or belly").
+BUILD = {
+    'slim':    {'chest_bust': -1.5, 'waist': -2.0, 'hips': -1.5, 'underbust': -1.0, 'thigh': -1.0, 'neck_collar': -0.5, 'sleeve_circumference': -0.75, 'shoulder': -0.25},
+    'regular': {},
+    'full':    {'chest_bust': 2.0, 'waist': 3.5, 'hips': 2.5, 'underbust': 2.0, 'thigh': 1.5, 'neck_collar': 0.75, 'sleeve_circumference': 1.0, 'shoulder': 0.25},
+}
+BUILD_ALIASES = {'athletic': 'regular', 'broad': 'regular', 'curvy': 'regular', 'heavy': 'full', 'lean': 'slim'}
+
+# How far off a size-and-height estimate typically is (± inches). Shown to shoppers and designers.
+SPREAD = {
+    'chest_bust': 2.0, 'underbust': 2.0, 'waist': 3.0, 'hips': 2.5, 'shoulder': 1.0, 'neck_collar': 0.75,
+    'thigh': 2.0, 'sleeve_circumference': 1.25, 'sleeve_length': 1.0, 'top_length': 2.0,
+    'trouser_length': 1.5, 'inseam': 1.5, 'shoulder_to_underbust': 1.0, 'ankle_opening': 1.0,
 }
 
-# Usual Size Fit Offsets (PRD Section 9)
-USUAL_FIT_OFFSETS = {
-    'tight':       {'bust': 1.0,  'waist': 1.2,  'hips': 1.0},
-    'fitted':      {'bust': 0.0,  'waist': 0.0,  'hips': 0.0},
-    'comfortable': {'bust': -0.5, 'waist': -0.5, 'hips': -0.5},
-    'relaxed':     {'bust': -1.5, 'waist': -1.5, 'hips': -1.5},
-}
+LABEL = 'Rough guide. Please check with a tape measure if you can.'
+DISCLAIMER = ('These numbers are a rough guide worked out from your size and height, not measurements. '
+              'Bodies vary a lot within one size. Measure with a tape if you can; the designer will '
+              'confirm your measurements with you before cutting.')
 
-# Garment Ease Multipliers (Body vs Garment Ease - PRD Section 10 & 17)
-GARMENT_EASE = {
-    'slim':    {'chest': 1.5, 'waist': 1.0, 'hips': 1.5, 'thigh': 1.0},
-    'regular': {'chest': 2.5, 'waist': 2.0, 'hips': 2.5, 'thigh': 2.0},
-    'relaxed': {'chest': 4.0, 'waist': 3.5, 'hips': 4.0, 'thigh': 3.0},
-}
+
+def _norm_size(size) -> str:
+    s = str(size or 'M').strip().upper().replace(' ', '')
+    s = {'SMALL': 'S', 'MEDIUM': 'M', 'LARGE': 'L', 'EXTRALARGE': 'XL', '2XL': 'XXL', 'XXXL': '3XL'}.get(s, s)
+    return s if s in MEN else 'M'
+
+
+def _norm_sex(sex) -> str:
+    s = str(sex or '').strip().lower()
+    if s in ('female', 'woman', 'women', 'f', 'w'):
+        return 'female'
+    if s in ('male', 'man', 'men', 'm'):
+        return 'male'
+    return ''
+
+
+def _guess_sex(category: str) -> str:
+    """Older callers don't send sex: corset/gown/boubou cuts are womenswear, the rest default to men."""
+    c = (category or '').lower()
+    return 'female' if any(k in c for k in ('corset', 'gown', 'boubou', 'dress')) else 'male'
 
 
 def parse_natural_language_profile(text: str) -> Dict[str, Any]:
-    """
-    Interprets natural language descriptions and extracts structured fit signals.
-    Employs robust regex extraction with graceful fallback.
-    """
+    """Pull height, size, build and sex out of free text such as "5'10, usually L, big belly"."""
     if not text or not isinstance(text, str):
         return {}
-
-    text_lower = text.lower()
-    extracted: Dict[str, Any] = {}
-
-    # 1. Height parsing: 5'10, 5ft 10in, 6ft, 175cm
-    ft_in_match = re.search(r"(\d)\s*(?:ft|'|feet)\s*(\d{1,2})?\s*(?:in|\"|inches)?", text_lower)
-    if ft_in_match:
-        feet = int(ft_in_match.group(1))
-        inches = int(ft_in_match.group(2)) if ft_in_match.group(2) else 0
-        extracted['height_inches'] = feet * 12 + inches
+    t = text.lower()
+    out: Dict[str, Any] = {}
+    ft_in = re.search(r"(\d)\s*(?:ft|'|feet)\s*(\d{1,2})?\s*(?:in|\"|inches)?", t)
+    if ft_in:
+        out['height_inches'] = int(ft_in.group(1)) * 12 + (int(ft_in.group(2)) if ft_in.group(2) else 0)
     else:
-        cm_match = re.search(r"(\d{3})\s*cm", text_lower)
-        if cm_match:
-            extracted['height_inches'] = round(int(cm_match.group(1)) / 2.54, 1)
-
-    # 2. RTW Size parsing: XS, S, M, L, XL, XXL, 3XL
-    size_match = re.search(r"\b(xs|3xl|2xl|xxl|xl|small|medium|large|extra large|[sml])\b", text_lower)
-    if size_match:
-        s = size_match.group(1).upper()
-        if s == 'SMALL': s = 'S'
-        elif s == 'MEDIUM': s = 'M'
-        elif s == 'LARGE': s = 'L'
-        elif s in ('EXTRA LARGE', '2XL'): s = 'XXL'
-        extracted['rtw_size'] = s
-
-    # 3. Build parsing
-    if any(k in text_lower for k in ['broad shoulder', 'athletic', 'gym', 'muscular', 'v-shape']):
-        extracted['build'] = 'athletic'
-    elif any(k in text_lower for k in ['slim', 'skinny', 'lean', 'thin']):
-        extracted['build'] = 'slim'
-    elif any(k in text_lower for k in ['pot belly', 'big stomach', 'belly', 'plus size', 'heavy', 'thick', 'chubby', 'full figure']):
-        extracted['build'] = 'full'
-    elif any(k in text_lower for k in ['curvy', 'hourglass', 'hips']):
-        extracted['build'] = 'curvy'
-
-    # 4. Garment fit preference parsing
-    if any(k in text_lower for k in ['relaxed', 'loose', 'free', 'flowy', 'oversized', 'not too tight', 'comfortable']):
-        extracted['garment_fit'] = 'relaxed'
-    elif any(k in text_lower for k in ['tight', 'skin tight', 'body hug', 'snug']):
-        extracted['garment_fit'] = 'slim'
-    elif 'fitted' in text_lower or 'tailored' in text_lower:
-        extracted['garment_fit'] = 'regular'
-
-    return extracted
+        cm = re.search(r"(\d{3})\s*cm", t)
+        if cm:
+            out['height_inches'] = round(int(cm.group(1)) / 2.54, 1)
+    size = re.search(r"\b(xs|3xl|2xl|xxl|xl|small|medium|large|extra large|[sml])\b", t)
+    if size:
+        out['rtw_size'] = _norm_size(size.group(1))
+    if any(k in t for k in ('slim', 'skinny', 'lean', 'thin')):
+        out['build'] = 'slim'
+    elif any(k in t for k in ('belly', 'plus size', 'heavy', 'chubby', 'big stomach', 'full figure')):
+        out['build'] = 'full'
+    if re.search(r"\b(woman|female|lady|she)\b", t):
+        out['sex'] = 'female'
+    elif re.search(r"\b(man|male|guy|he)\b", t):
+        out['sex'] = 'male'
+    return out
 
 
 def calculate_fit_estimate(
@@ -111,201 +116,101 @@ def calculate_fit_estimate(
     style: str = 'standard',
     known_measurements: Optional[Dict[str, Any]] = None,
     text_description: Optional[str] = None,
-    customer = None
+    customer=None,
+    sex: str = '',
 ) -> Dict[str, Any]:
-    """
-    PRD v2.0 Deterministic Fit Estimation Engine with Confidence Scoring.
-    """
     known_measurements = known_measurements or {}
-    
-    # Merge natural language signals if provided
-    llm_confidence = 0.0
     if text_description:
-        parsed_nlp = parse_natural_language_profile(text_description)
-        if 'height_inches' in parsed_nlp: height_inches = parsed_nlp['height_inches']
-        if 'rtw_size' in parsed_nlp: rtw_size = parsed_nlp['rtw_size']
-        if 'build' in parsed_nlp: build = parsed_nlp['build']
-        if 'garment_fit' in parsed_nlp: garment_fit = parsed_nlp['garment_fit']
-        llm_confidence = 0.85
+        parsed = parse_natural_language_profile(text_description)
+        height_inches = parsed.get('height_inches', height_inches)
+        rtw_size = parsed.get('rtw_size', rtw_size)
+        build = parsed.get('build', build)
+        sex = sex or parsed.get('sex', '')
 
-    # Sanitize and normalize inputs
-    rtw_size = str(rtw_size).upper()
-    if rtw_size not in BASELINES:
-        rtw_size = 'M'
-    
-    height_inches = float(height_inches or 70.0)
-    height_inches = max(54.0, min(84.0, height_inches)) # Bounded 4'6" to 7'0"
-    
-    build = str(build).lower()
-    if build not in BUILD_OFFSETS:
+    size = _norm_size(rtw_size)
+    sex = _norm_sex(sex) or _guess_sex(category)
+    try:
+        h = float(height_inches or (70.0 if sex == 'male' else 64.0))
+    except (TypeError, ValueError):
+        h = 70.0 if sex == 'male' else 64.0
+    h = max(54.0, min(84.0, h))  # 4'6" to 7'0"
+    build = BUILD_ALIASES.get(str(build).lower(), str(build).lower())
+    if build not in BUILD:
         build = 'regular'
 
-    usual_size_fit = str(usual_size_fit).lower()
-    if usual_size_fit not in USUAL_FIT_OFFSETS:
-        usual_size_fit = 'fitted'
-
-    garment_fit = str(garment_fit).lower()
-    if garment_fit not in GARMENT_EASE:
-        garment_fit = 'regular'
-
-    # 1. Base Anchor
-    base = BASELINES[rtw_size]
-    b_offset = BUILD_OFFSETS[build]
-    u_offset = USUAL_FIT_OFFSETS[usual_size_fit]
-    ease = GARMENT_EASE[garment_fit]
-
-    # Height variance from 5'10" (70 in)
-    delta_h = height_inches - 70.0
-
-    # 2. Net Body Measurements
-    body_chest = round(base['bust'] + b_offset['bust'] + u_offset['bust'], 1)
-    body_shoulder = round(base['shoulder'] + b_offset['shoulder'] + (delta_h * 0.05), 1)
-    body_waist = round(base['waist'] + b_offset['waist'] + u_offset['waist'], 1)
-    body_hips = round(base['hips'] + b_offset['hips'] + u_offset['hips'], 1)
-    body_sleeve = round(base['sleeve'] + (delta_h * 0.3), 1)
-    body_thigh = round(base['thigh'] + b_offset['thigh'], 1)
-    body_collar = round(base['collar'] + b_offset['collar'], 1)
-    body_underbust = round(body_waist - 2.0, 1)
-
-    # 3. Garment Cut Measurements (Length rules & ease)
-    if style == 'modern_short':
-        top_len_base = 33.0
-        top_len_scale = 0.5
-    elif style == 'long':
-        top_len_base = 42.0
-        top_len_scale = 0.75
-    else: # standard
-        top_len_base = 37.0
-        top_len_scale = 0.60
-    
-    garment_top_len = round(top_len_base + (delta_h * top_len_scale), 1)
-    garment_trouser_len = round(base['trouser_len'] + (delta_h * 0.70), 1)
-    garment_inseam = round(garment_trouser_len - 10.0, 1)
-    
-    if 'gown' in category or 'corset' in category:
-        garment_top_len = round(56.0 + (delta_h * 0.85), 1)
-    
-    garment_chest = round(body_chest + ease['chest'], 1)
-    garment_waist = round(body_waist + ease['waist'], 1)
-    garment_hips = round(body_hips + ease['hips'], 1)
-
-    # 4. Assembled Raw Prediction Spec
-    raw_measurements = {
-        'chest_bust': body_chest,
-        'shoulder': body_shoulder,
-        'waist': body_waist,
-        'hips': body_hips,
-        'sleeve_length': body_sleeve,
-        'top_length': garment_top_len,
-        'trouser_length': garment_trouser_len,
-        'inseam': garment_inseam,
-        'thigh': body_thigh,
-        'neck_collar': body_collar,
-        'underbust': body_underbust,
-        'shoulder_to_underbust': round(14.0 + (delta_h * 0.1), 1),
-    }
-
-    # 5. Priority Cascade (PRD Section 16: Explicit User > Historical > Estimator)
-    final_measurements: Dict[str, Any] = {}
-    sources: Dict[str, str] = {}
-    confidences: Dict[str, float] = {}
-
-    for key, val in raw_measurements.items():
-        if key in known_measurements and known_measurements[key]:
-            final_measurements[key] = float(known_measurements[key])
-            sources[key] = 'user'
-            confidences[key] = 1.0
-        elif customer and getattr(customer, 'saved_measurements', None) and key in customer.saved_measurements:
-            final_measurements[key] = float(customer.saved_measurements[key])
-            sources[key] = 'historical'
-            confidences[key] = 0.92
-        else:
-            final_measurements[key] = val
-            sources[key] = 'llm_interpreted' if llm_confidence > 0 else 'deterministic'
-            
-            if key in ('chest_bust', 'waist'):
-                confidences[key] = 0.84 if usual_size_fit != 'fitted' else 0.78
-            elif key in ('shoulder', 'sleeve_length'):
-                confidences[key] = 0.82
-            elif key in ('top_length', 'trouser_length'):
-                confidences[key] = 0.88 if delta_h != 0 else 0.80
-            else:
-                confidences[key] = 0.75
-
-    SPREAD_MAP = {
-        'chest_bust': 1.0,
-        'shoulder': 0.5,
-        'waist': 1.5,
-        'hips': 1.5,
-        'top_length': 1.0,
-        'trouser_length': 1.0,
-        'sleeve_length': 0.5,
-        'neck_collar': 0.5,
-        'underbust': 1.0,
-        'thigh': 1.0,
-        'inseam': 1.0,
-        'shoulder_to_underbust': 0.5,
-    }
-
-    estimated_ranges: Dict[str, Any] = {}
-    for key, val in final_measurements.items():
-        delta = SPREAD_MAP.get(key, 1.0)
-        try:
-            target_val = float(val)
-            min_v = round(target_val - delta, 1)
-            max_v = round(target_val + delta, 1)
-            estimated_ranges[key] = {
-                'min': min_v,
-                'max': max_v,
-                'target': target_val,
-                'bracket': f"{min_v} - {max_v}",
-                'unit': 'IN',
-            }
-        except (ValueError, TypeError):
-            pass
-
-    avg_conf = sum(confidences.values()) / max(1, len(confidences))
-    if avg_conf >= 0.85:
-        overall_tier = 'high'
-        tier_label = 'Strong fit estimate'
-    elif avg_conf >= 0.72:
-        overall_tier = 'medium'
-        tier_label = 'Good starting estimate'
+    if sex == 'male':
+        chest, waist, hips, shoulder, neck, thigh, bicep = MEN[size]
+        underbust = None
+        # Men run ~1.5" more chest-to-underbust; not used for menswear cuts.
+        sleeve = 0.357 * h            # shoulder point to wrist
+        trouser = 0.59 * h            # waist to ankle (outseam)
+        inseam = 0.45 * h
+        top = 0.53 * h                # high shoulder to just above the knee (senator / kaftan top)
+        if style == 'modern_short':
+            top = 0.47 * h
+        elif style == 'long':
+            top = 0.60 * h
+        shoulder_to_underbust = None
     else:
-        overall_tier = 'low'
-        tier_label = 'We recommend adding your chest and waist measurements for a better fit.'
+        chest, underbust, waist, hips, shoulder, thigh, bicep = WOMEN[size]
+        neck = None
+        sleeve = 0.35 * h
+        trouser = 0.60 * h
+        inseam = 0.455 * h
+        top = 0.82 * h + 2.0          # shoulder to floor in low heels: gowns, boubou, dresses
+        shoulder_to_underbust = 0.21 * h
 
+    raw = {
+        'chest_bust': chest, 'waist': waist, 'hips': hips, 'shoulder': shoulder, 'thigh': thigh,
+        'sleeve_circumference': bicep, 'sleeve_length': sleeve, 'top_length': top,
+        'trouser_length': trouser, 'inseam': inseam, 'ankle_opening': 14.0 if sex == 'male' else 13.0,
+    }
+    if neck is not None:
+        raw['neck_collar'] = neck
+    if underbust is not None:
+        raw['underbust'] = underbust
+        raw['shoulder_to_underbust'] = shoulder_to_underbust
+    for key, delta in BUILD[build].items():
+        if key in raw:
+            raw[key] += delta
+    raw = {k: round(v * 2) / 2 for k, v in raw.items()}  # nearest half inch: no false precision
+
+    measurements: Dict[str, float] = {}
+    sources: Dict[str, str] = {}
+    for key, val in raw.items():
+        given = known_measurements.get(key)
+        try:
+            given = float(given) if given not in (None, '') else None
+        except (TypeError, ValueError):
+            given = None
+        if given:
+            measurements[key], sources[key] = given, 'user'
+        else:
+            measurements[key], sources[key] = val, 'estimate'
+
+    ranges = {}
+    for key, val in measurements.items():
+        d = 0.0 if sources[key] == 'user' else SPREAD.get(key, 1.5)
+        lo, hi = round(val - d, 1), round(val + d, 1)
+        ranges[key] = {'min': lo, 'max': hi, 'target': val, 'bracket': f'{lo} - {hi}', 'unit': 'IN'}
+
+    confidences = {k: (1.0 if sources[k] == 'user' else 0.5) for k in measurements}
+    estimated = [k for k in measurements if sources[k] == 'estimate']
     return {
-        'version': '1.2',
-        'estimated_ranges': estimated_ranges,
-        'confidence_tier': overall_tier,
-        'confidence_label': tier_label,
-        'confidence_score': round(avg_conf, 2),
+        'version': VERSION,
+        'estimated_ranges': ranges,
+        'confidence_tier': 'low' if estimated else 'high',
+        'confidence_label': LABEL if estimated else 'Your own measurements',
+        'confidence_score': round(sum(confidences.values()) / max(1, len(confidences)), 2),
         'input_profile': {
-            'rtw_size': rtw_size,
-            'height_inches': height_inches,
-            'build': build,
-            'usual_size_fit': usual_size_fit,
-            'garment_fit': garment_fit,
-            'style': style,
-            'category': category,
+            'sex': sex, 'rtw_size': size, 'height_inches': h, 'build': build,
+            'usual_size_fit': usual_size_fit, 'garment_fit': garment_fit, 'style': style, 'category': category,
         },
-        'body_measurements': {
-            'chest': body_chest,
-            'shoulder': body_shoulder,
-            'waist': body_waist,
-            'hips': body_hips,
-            'underbust': body_underbust,
-        },
-        'garment_measurements': {
-            'chest': garment_chest,
-            'waist': garment_waist,
-            'hips': garment_hips,
-            'top_length': garment_top_len,
-            'trouser_length': garment_trouser_len,
-        },
-        'measurements': final_measurements,
+        'body_measurements': {k: measurements[k] for k in ('chest_bust', 'waist', 'hips', 'shoulder') if k in measurements},
+        'garment_measurements': {k: measurements[k] for k in ('top_length', 'trouser_length', 'sleeve_length') if k in measurements},
+        'measurements': measurements,
         'confidences': confidences,
         'sources': sources,
-        'disclaimer': 'These are estimated measurements. For the most accurate fit, enter your actual measurements.'
+        'estimated_fields': estimated,
+        'disclaimer': DISCLAIMER,
     }

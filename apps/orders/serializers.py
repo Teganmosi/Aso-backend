@@ -193,6 +193,7 @@ class OrderMessageCreateSerializer(serializers.Serializer):
 
 class OrderActionRequestSerializer(serializers.Serializer):
     measurement_key = serializers.CharField(required=True, max_length=50)
+    order_item_id = serializers.UUIDField(required=False)
     label = serializers.CharField(required=True, max_length=100)
     prompt = serializers.CharField(required=False, allow_blank=True, max_length=500)
 
@@ -201,3 +202,4 @@ class OrderActionResolveSerializer(serializers.Serializer):
     message_id = serializers.UUIDField(required=True)
     measurement_key = serializers.CharField(required=True, max_length=50)
     new_value = serializers.CharField(required=True, max_length=50)
+    order_item_id = serializers.UUIDField(required=False)

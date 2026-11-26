@@ -29,12 +29,17 @@ class SavedMeasurementsTests(TestCase):
 
     def test_save_then_read_back(self):
         self.client.force_authenticate(user=self.user)
-        measurements = {'bust': 36, 'waist': 30, 'hips': 40, 'unit': 'in'}
+        # Keys as the website sends them; numbers are checked and stored as text.
+        measurements = {'chest_bust': 36, 'waist': 30, 'hips': 40.5, 'unit': 'in', 'not_a_field': 'x'}
         res = self.client.put(URL, {'measurements': measurements}, format='json')
         self.assertEqual(res.status_code, status.HTTP_200_OK, res.data)
         saved = self.client.get(URL).data['saved_measurements']
-        for key, value in measurements.items():
-            self.assertEqual(saved.get(key), value)
+        self.assertEqual(saved, {'unit': 'IN', 'chest_bust': '36', 'waist': '30', 'hips': '40.5'})
+
+    def test_rejects_impossible_numbers(self):
+        self.client.force_authenticate(user=self.user)
+        res = self.client.put(URL, {'measurements': {'unit': 'IN', 'waist': 300}}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_rejects_non_object(self):
         self.client.force_authenticate(user=self.user)

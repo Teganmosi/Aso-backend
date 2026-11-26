@@ -90,6 +90,10 @@ class AddCartItemSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(default=1, min_value=1)
     custom_measurements = serializers.DictField(required=False, default=dict)
 
+    def validate_custom_measurements(self, value):
+        from apps.common.measurements import clean_measurements
+        return clean_measurements(value)
+
     def validate_variant_id(self, value):
         try:
             variant = ProductVariant.objects.select_related('product', 'product__vendor').get(id=value)

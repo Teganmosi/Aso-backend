@@ -396,7 +396,8 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     def get_size_chart(self, obj):
         if obj.size_chart and isinstance(obj.size_chart, dict) and obj.size_chart.get('body_measurements'):
             return obj.size_chart
-        return generate_default_size_chart(obj)
+        # The designer hasn't added a chart: show typical sizes, clearly marked as a general guide.
+        return {**generate_default_size_chart(obj), 'is_generic': True}
 
     def get_media(self, obj):
         # Full gallery (model Meta ordering: display_order, -is_primary, created_at)

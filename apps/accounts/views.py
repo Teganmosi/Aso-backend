@@ -232,6 +232,15 @@ class UserMeasurementsView(APIView):
                 {'detail': 'Measurements must be a JSON object.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        from apps.common.measurements import clean_measurements
+        measurements = clean_measurements(measurements)
+        # The profile keeps measurements the shopper took. Estimated numbers are per-order only,
+        # so a guess never comes back later looking like a real measurement.
+        for key in measurements.pop('estimated_fields', []) or []:
+            measurements.pop(key, None)
+        measurements.pop('estimated_ranges', None)
+        if str(measurements.get('fit_source', '')).startswith('smart_estimator'):
+            measurements['fit_source'] = 'manual_atelier'
         profile.saved_measurements = measurements
         profile.save(update_fields=['saved_measurements', 'updated_at'])
         return Response({
