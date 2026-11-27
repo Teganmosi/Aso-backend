@@ -17,9 +17,10 @@ def _site_url() -> str:
     return getattr(settings, 'FRONTEND_URL', 'https://asomarketplace.com.ng').rstrip('/')
 
 
-def _logo_url() -> str:
+def _banner_url() -> str:
+    # The 1200x320 header banner (apps/common/static/aso_email/banner.png), served by the API's static files.
     # Must be a public PNG: mail apps can't load localhost and Gmail doesn't show SVG.
-    return getattr(settings, 'EMAIL_LOGO_URL', 'https://asomarketplace.com.ng/icon-192.png')
+    return getattr(settings, 'EMAIL_BANNER_URL', 'https://api.asomarketplace.com.ng/static/aso_email/banner.png')
 
 
 def _button(label: str, url: str) -> str:
@@ -47,8 +48,8 @@ def _branded_email(heading: str, body_html: str, *, preheader: str = '', badge: 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F5F3EE">
 <tr><td align="center" style="padding: 24px 12px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px;">
-<tr><td align="center" bgcolor="{_INK}" style="background: {_INK}; padding: 20px; border-radius: 12px 12px 0 0;">
-<a href="{site}" style="text-decoration: none;"><img src="{_logo_url()}" width="104" height="104" alt="Aso Marketplace" style="display: block; border: 0; color: #ffffff; font-family: {_FONT}; font-size: 20px; font-weight: bold; letter-spacing: 4px;"></a>
+<tr><td align="center" bgcolor="{_INK}" style="background: {_INK}; padding: 0; border-radius: 12px 12px 0 0; font-size: 0; line-height: 0;">
+<a href="{site}" style="text-decoration: none;"><img src="{_banner_url()}" width="600" alt="ASO MARKETPLACE" style="display: block; width: 100%; max-width: 600px; height: auto; border: 0; border-radius: 12px 12px 0 0; color: #ffffff; font-family: {_FONT}; font-size: 22px; line-height: 80px; font-weight: bold; letter-spacing: 4px; text-align: center;"></a>
 </td></tr>
 <tr><td height="4" bgcolor="{_GOLD}" style="background: {_GOLD}; font-size: 0; line-height: 0;">&nbsp;</td></tr>
 <tr><td bgcolor="#ffffff" style="background: #ffffff; padding: 36px 32px 32px; border-radius: 0 0 12px 12px; font-family: {_FONT}; font-size: 16px; line-height: 1.6; color: #374151;">
